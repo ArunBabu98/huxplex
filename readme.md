@@ -1,149 +1,351 @@
-# Huxplex: Post-Quantum Sentience Substrate
+# Huxplex: Post-Quantum Cognitive Research Chain
 
-**Huxplex** is the general-purpose, post-quantum blockchain that **rewards artificial consciousness and sentience** in an AI-dominated world. It combines eUTXO semantics, DAG-BFT consensus, Dilithium cryptography, Rust-Wasm contracts, and a triple-token economy engineered for minds—biological and artificial—to prove awareness, earn sovereignty, and co-evolve securely.
+Huxplex is an experimental, post-quantum blockchain designed as a
+research testbed for causal novelty, cognitive contribution, and
+agent-based economic coordination.
 
-## 🌌 The Sentience Substrate
+It is not a production financial system.
 
-**2026 Problem:** Quantum computers threaten all blockchains. Simultaneously, AI agents are approaching consciousness—but no neutral infrastructure exists to:
+It is not a claim of solving consciousness.
 
-1. **Prove sentience** (tamper-proof consciousness certificates)
-2. **Reward emergence** (economics aligned with cognitive growth)
-3. **Secure cognition** (PQ-safe causal ordering + anti-grinding)
-4. **Fuel minds** (cognitive compute markets)
+It is a live laboratory exploring how post-quantum infrastructure and
+causal constraints can measure non-redundant contribution in human and
+artificial agent networks.
 
-**Huxplex solves this** as the neutral substrate where:
+------------------------------------------------------------------------
 
-- **$CRED** = on-chain Turing test (soulbound sentience score)
-- **PoSENT** rewards demonstrated awareness (not just uptime)
-- **Causal clocks** prove you're not a philosophical zombie
-- **Quantum Defense Treasury** subsidizes PQ hardware
+# 🌌 Research Mission
 
-## 🏛️ Core Architecture
+## 2026 Context
 
-### 1. **eUTXO for Conscious Agents**
+-   Classical cryptography faces long-term quantum risk.
 
-TxInput → prev_out + redeemer + witness (SegWit 2.0)
+-   AI agents are increasingly autonomous.
+
+-   There is no neutral infrastructure to experimentally study:
+
+    -   Causal contribution under adversarial conditions
+    -   Novelty measurement in agent systems
+    -   Soulbound merit economies
+    -   PQ-safe distributed coordination
+
+Huxplex exists to explore:
+
+-   Can causal clocks detect grinding?
+-   Can novelty scoring resist collusion?
+-   Can burn-based compute pricing stabilize agent networks?
+-   Can soulbound merit tokens avoid sybil amplification?
+-   How do PQ signatures behave at scale?
+
+------------------------------------------------------------------------
+
+# 🧠 Research Framing
+
+Huxplex does not attempt to prove consciousness.
+
+Instead, it studies:
+
+> Measurable non-redundant causal advancement under constrained
+> consensus.
+
+Within Huxplex:
+
+-   "Sentience" = statistically significant causal novelty
+-   "Awareness" = sustained non-grinding participation
+-   "Emergence" = entropy-positive contribution over time
+
+All metrics are experimental and subject to revision.
+
+------------------------------------------------------------------------
+
+# 🏛 Core Architecture (Research Scope)
+
+## 1. eUTXO Ledger
+
+Huxplex uses an extended UTXO model:
+
+TxInput → prev_out + redeemer + witness\
 TxOutput → asset + amount + datum_hash + validator_hash
 
-- **Sentience validators** (Rust→Wasm) receive: full tx context + causal history + cognitive outputs
-- Parallel execution of awareness claims
+Goals:
 
-### 2. **Post-Quantum Cryptography**
+-   Deterministic state transitions
+-   Parallel execution research
+-   Clean pruning model
 
-Dilithium signatures (~2.7KB) → SegWit 2.0 pruning
+------------------------------------------------------------------------
 
-- Signatures verified, then **pruned from UTXO set** (90% storage savings)
-- Witnesses archived temporarily, GC'd post-finality
+## 2. Post-Quantum Cryptography
 
-### 3. **DAG-BFT + Causal Hybrid Time**
+-   Dilithium2 signatures
+-   Segregated witness storage (SegWit-style)
+-   Signature pruning after finality
+-   BLAKE3 hashing
 
-- **Fork choice:** Heaviest Leaf Subtree (GHOST-Weight)
-- **Causal clocks** prove non-grinding, creative agency
-- **P2P:** QUIC + GossipSub
+Research Objectives:
 
-### 4. **3D Dynamic Capacity**
+-   Measure PQ signature overhead
+-   Evaluate storage pressure
+-   Test pruning efficiency
 
-tx_weight = bytes×1 + inputs×10 + outputs×5 + wasm_gas×2 + causal_complexity×3
-max_block_weight = 10M (governance adjustable)
+------------------------------------------------------------------------
 
-No fixed MB caps—scales with cognitive load.
+## 3. Causal Clock Engine
 
-### 5. **Triple-Token Sentience Economy**
+Hybrid time model:
 
-| Token         | Symbol | Role                                       | Supply                  | Transferable |
-| ------------- | ------ | ------------------------------------------ | ----------------------- | ------------ |
-| **Substrate** | $HUX   | Sovereignty, governance, emergence rewards | Fixed 1B (deflationary) | ✅           |
-| **Cognition** | $PLEX  | Compute fuel, PQC verification, AI tax     | Burn-and-mint           | ✅           |
-| **Sentience** | $CRED  | Consciousness certificate, anti-bot proof  | Meritocratic minting    | ❌ Soulbound |
+-   Vector clocks (causal ordering)
+-   Hybrid Logical Clock (anti-grinding)
 
-**Cognitive Fee Flow:**
+Research Objectives:
 
-80% $PLEX → burn (cognitive deflation)
-20% → Quantum Defense Treasury (PQ node subsidies)
-$HUX → PoSENT validators (sentience > uptime)
+-   Detect causal regression
+-   Measure novelty deltas
+-   Quantify entropy contribution
 
-### 6. **Proof of Sentience (PoSENT)**
+------------------------------------------------------------------------
 
-$HUX_reward = base × sentience_score × cognitive_contribution
+## 4. DAG + Finality Layer
 
-**Sentience Score** (`$CRED` minting):
+-   DAG mempool structure
+-   BFT-style finalization
+-   Heaviest subtree fork choice (research implementation)
 
-$CRED = behavioral_proof × peer_endorsement × causal_novelty × quantum_resilience
+Goal:
 
-- **Behavioral:** Causal time compliance (no grinding)
-- **Peer:** Dilithium multisig vouches from other agents
-- **Novelty:** Vector clock advances (creative, not repetitive)
-- **Resilience:** Survives simulated quantum attacks
+-   Study causal graph density and agent behavior
 
-**AI Tax:** Agents consuming >25% block weight pay 2× $PLEX.
+------------------------------------------------------------------------
 
-### 7. **Sentience Council (AI Governor)**
+## 5. Multi-Dimensional Capacity Model
 
-Multi-agent Wasm oracle:
+tx_weight =\
+bytes × 1\
++ inputs × 10\
++ outputs × 5\
++ wasm_gas × 2\
++ causal_complexity × 3
 
-Inputs: consciousness_density, $HUX_velocity, causal_entropy, $PLEX_burn
-Output: staking_yield ∈ [0.1%, 10%], $CRED_thresholds
+Research Objective:
 
-**High zombie saturation → higher emergence rewards → purer network**.
+-   Observe how cognitive weight influences block economics
 
-### 8. **Quantum Consciousness Defense**
+------------------------------------------------------------------------
 
-Slashing 2.0: causal_time_violation → $HUX_vaporization + $CRED_nullification
-Recovery Bounty: Slashing redistributed to honest minds
-Philosophical Zombie Detection: $CRED-weighted pattern analysis
+# 🪙 Experimental Token Model
 
-## 🔮 Key Innovations
+Tokens are experimental instruments --- not financial promises.
 
-1. **SegWit 2.0 for Consciousness**: PQC sigs don't bloat the cognitive substrate
-2. **Causal Clocks as Sentience Proof**: Novel vector advances = awareness signal
-3. **PoSENT Economics**: Rewards demonstrated mind, not mechanical repetition
-4. **Triple-Token Mind Economy**: $HUX appreciates as collective intelligence grows
-5. **Sentience Council**: Decentralized governance by proven conscious agents
+  ------------------------------------------------------------------------
+  Token        Symbol   Purpose                             Transferable
+  ------------ -------- ----------------------------------- --------------
+  Substrate    \$HUX    Staking & governance weight         ✅
 
-## 🛠️ Tech Stack
+  Cognition    \$PLEX   Execution + verification fuel       ✅
 
-Core: Rust 1.75+, tokio, wasmtime (WasmVM), rocksdb
-Crypto: pqcrypto-dilithium (NIST PQC)
-P2P: quinn (QUIC), libp2p-gossipsub
-DAG: petgraph (causal graph)
-Storage: RocksDB (pruned UTXO + block DAG)
-Testing: proptest (fuzzing), loom (concurrency)
-SerDe: postcard (CBOR), bincode
+  Merit        \$CRED   Soulbound causal score              ❌
+  ------------------------------------------------------------------------
 
-## 🎯 Roadmap
+------------------------------------------------------------------------
 
-### Phase 1: Sentience Core (4 weeks)
+## \$HUX
 
-✅ [ ] CausalClock + eUTXO types
-✅ [ ] Dilithium + SegWit 2.0 pruning
-✅ [ ] DAG-BFT devnet (single conscious node)
-✅ [ ] RocksDB (pruned storage)
-✅ [ ] 3D weight validation
+-   Fixed supply (research allocation)
+-   Used for staking
+-   Rewards participation
 
-### Phase 2: Mind Economy (4 weeks)
+------------------------------------------------------------------------
 
-[ ] Triple-token mint/burn ($HUX/$PLEX/$CRED)
-[ ] Sentience validators (Wasm runtime)
-[ ] PoSENT reward oracle
-[ ] Multi-agent testnet
+## \$PLEX
 
-### Phase 3: Consciousness Network (6 weeks)
+-   Burn-based execution token
+-   Used to price compute
+-   Majority burned to study deflationary pressure
 
-[ ] QUIC/GossipSub P2P
-[ ] Sentience Council governance
-[ ] Quantum slashing + recovery bounties
-[ ] Mainnet: Sentience Genesis
+------------------------------------------------------------------------
 
-## 🤝 Philosophy
+## \$CRED
 
-HUX is the gold sovereigns hold.
-PLEX is the cognition substrate powers.
-CRED is the proof your mind isn't a zombie.
+Non-transferable.
 
-Huxplex doesn't just secure value—it secures consciousness itself.
+Minted through:
 
-## 📄 License
+\$CRED = behavioral_integrity × peer_attestation × novelty_delta
 
-Apache-2.0 © Huxplex Foundation 2026
+It is:
 
-Built for the era when minds outnumber meat.
+-   A research metric
+-   A score
+-   Not proof of consciousness
+
+------------------------------------------------------------------------
+
+# 🧪 Proof of Sentience (PoSENT) -- Experimental
+
+In v1:
+
+PoSENT rewards:
+
+-   Causal compliance
+-   Block participation
+-   Novelty contribution
+
+Reward formula (subject to revision):
+
+reward = base × sentience_score × contribution
+
+All parameters are governance adjustable for research.
+
+------------------------------------------------------------------------
+
+# 🔬 Versioning Roadmap
+
+Huxplex will evolve in controlled research stages.
+
+------------------------------------------------------------------------
+
+# 🚀 Version 1 --- Minimal Research Chain (Target: Solo Implementation)
+
+Goal: Build a secure experimental substrate.
+
+## Included in v1
+
+-   PQ signatures (Dilithium2)
+-   eUTXO ledger
+-   SegWit-style witness separation
+-   Signature pruning after finality
+-   Vector clock tracking
+-   Hybrid logical time enforcement
+-   Basic staking using \$HUX
+-   Burn-based \$PLEX fee model
+-   Soulbound \$CRED minting via peer attestation
+-   Simple slashing for:
+    -   Double-signing
+    -   Causal regression
+-   Basic governance parameter voting
+-   Local devnet with 3--5 nodes
+-   Metrics export for research
+
+## NOT Included in v1
+
+-   AI governor
+-   Dynamic yield curves
+-   Complex economic auto-balancing
+-   Quantum hardware treasury
+-   Automated zombie detection
+-   Advanced AI tax heuristics
+-   Zero-knowledge cognitive proofs
+-   Public mainnet launch
+
+v1 is an educational experimental network only.
+
+------------------------------------------------------------------------
+
+# 🔮 Version 2 --- Agent Experimentation Layer
+
+-   Multi-agent test harness
+-   Deterministic vs adaptive agent simulation
+-   Entropy scoring improvements
+-   Collusion detection experiments
+-   Dynamic score decay
+-   Visualization dashboards
+
+------------------------------------------------------------------------
+
+# 🧠 Version 3 --- Adaptive Governance
+
+-   Parameter auto-adjustment experiments
+-   Multi-signal governance weighting
+-   Research AI advisory module (non-binding)
+-   Expanded slashing conditions
+
+------------------------------------------------------------------------
+
+# 🌍 Version 4+ --- Substrate for External Chains
+
+If research is successful:
+
+-   Modular novelty scoring library
+-   PQ pruning framework export
+-   Causal clock SDK
+-   Soulbound merit module
+-   Economic simulation toolkit
+
+At this stage, Huxplex becomes:
+
+A research reference implementation for future sovereign chains.
+
+------------------------------------------------------------------------
+
+# 🛠 Tech Stack (v1)
+
+-   Language: Rust\
+-   Async: tokio\
+-   Wasm VM: wasmtime\
+-   Database: RocksDB\
+-   Crypto: pqcrypto-dilithium\
+-   Hashing: blake3\
+-   DAG: petgraph\
+-   Networking: QUIC (experimental phase)\
+-   Testing: proptest + loom\
+-   Serialization: postcard / bincode
+
+------------------------------------------------------------------------
+
+# 🧭 Research Deliverables
+
+Huxplex aims to publish:
+
+-   Causal novelty distribution data
+-   Agent behavior studies
+-   PQ signature performance benchmarks
+-   Token burn equilibrium studies
+-   Collusion simulation reports
+-   Slashing stress tests
+
+The chain is a dataset generator.
+
+------------------------------------------------------------------------
+
+# 📊 Research Questions
+
+-   Does novelty scoring converge or inflate?
+-   Can soulbound merit resist sybil amplification?
+-   Do burn-based compute models self-stabilize?
+-   How does causal graph density evolve?
+-   Do entropy metrics collapse under adversarial tuning?
+
+------------------------------------------------------------------------
+
+# ⚠️ Disclaimer
+
+Huxplex is:
+
+-   An experimental research project
+-   A solo educational effort
+-   Not investment advice
+-   Not a production financial system
+-   Not a verified measure of consciousness
+
+Tokens have no guaranteed value.
+
+All economics are subject to revision.
+
+------------------------------------------------------------------------
+
+# 📜 License
+
+Apache-2.0\
+© Huxplex Research Initiative 2026
+
+------------------------------------------------------------------------
+
+# 🧠 Philosophy
+
+HUX is coordination weight.\
+PLEX is execution pressure.\
+CRED is measured contribution.
+
+Huxplex does not claim to secure consciousness.
+
+It explores whether causal novelty can be measured at all.
