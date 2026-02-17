@@ -4,4 +4,8 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-pqcrypto-mldsa = "0.1.2"
+libcrux-ml-dsa = "0.0.7"
+thiserror = "2.0.18"
+hex = "0.4.3"
+bip32 = "0.5.3"
+rand = "0.10.0"
