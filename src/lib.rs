@@ -1,2 +1,2 @@
-mod core;
 mod crypto;
+mod network;
