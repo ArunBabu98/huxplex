@@ -1,5 +1,6 @@
 mod bip32;
 mod error;
+mod kem;
 mod privatekey;
 mod publickey;
 mod signature;
@@ -7,7 +8,7 @@ mod signaturescheme;
 
 #[cfg(test)]
 
-mod tests {
+mod ml_dsa_44_tests {
     use crate::crypto::{
         bip32::derive_mldsa_seed, signature::Keypair, signaturescheme::SignatureSchemeId,
     };
@@ -250,5 +251,41 @@ mod tests {
         assert!(is_valid, "Large message should be signable");
 
         println!("✓ Large message (1MB) handling works");
+    }
+}
+
+#[cfg(test)]
+mod ml_kem_768_tests {
+    use crate::crypto::kem::*;
+
+    // ── Fixed randomness for reproducible tests ──────────────────────────────
+    const KEYGEN_RAND_A: [u8; 64] = [0x11u8; 64];
+
+    #[test]
+    fn test_keygen_output_sizes_match_fips203_spec() {
+        let (ek, dk) = kem768_keygen(KEYGEN_RAND_A);
+
+        // These constants are non-negotiable per FIPS 203 ML-KEM-768
+        assert_eq!(
+            EK_SIZE, 1184,
+            "EK_SIZE constant must be 1184 (FIPS 203 ML-KEM-768)"
+        );
+        assert_eq!(
+            DK_SIZE, 2400,
+            "DK_SIZE constant must be 2400 (FIPS 203 ML-KEM-768)"
+        );
+
+        assert_eq!(
+            ek.len(),
+            EK_SIZE,
+            "Encapsulation key must be {} bytes",
+            EK_SIZE
+        );
+        assert_eq!(
+            dk.len(),
+            DK_SIZE,
+            "Decapsulation key must be {} bytes",
+            DK_SIZE
+        );
     }
 }

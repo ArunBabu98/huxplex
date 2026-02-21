@@ -1,7 +1,7 @@
 use bip32::{DerivationPath, XPrv};
 
 pub fn derive_mldsa_seed(bytes: [u8; 64], index: u32) -> [u8; 32] {
-    let path_str = format!("m/44'/931'/0'/0'/{index}'");
+    let path_str = format!("m/44'/931931'/0'/0'/{index}'");
     let path: DerivationPath = path_str.parse().expect("Invalid path string");
     let child_xprv = XPrv::derive_from_path(&bytes, &path).expect("BIP32 derivation failed");
 
