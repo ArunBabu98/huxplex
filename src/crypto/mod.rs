@@ -303,4 +303,43 @@ mod ml_kem_768_tests {
             "Encapsulator and decapsulator must derive an identical 32-byte shared secret"
         );
     }
+
+    // ── 3. DETERMINISM ────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_keygen_is_deterministic_same_randomness_same_keys() {
+        let (ek1, dk1) = kem768_keygen(KEYGEN_RAND_A);
+        let (ek2, dk2) = kem768_keygen(KEYGEN_RAND_A);
+
+        assert_eq!(
+            ek1, ek2,
+            "Same keygen randomness must produce an identical EK"
+        );
+        assert_eq!(
+            dk1, dk2,
+            "Same keygen randomness must produce an identical DK"
+        );
+    }
+
+    #[test]
+    fn test_encapsulation_is_deterministic_same_inputs_same_outputs() {
+        let (ek, dk) = kem768_keygen(KEYGEN_RAND_A);
+
+        let (ct1, ss1) = kem768_encapsulate(ek, ENCAP_RAND_1);
+        let (ct2, ss2) = kem768_encapsulate(ek, ENCAP_RAND_1);
+
+        assert_eq!(
+            ct1, ct2,
+            "Same (EK, rand) must produce an identical ciphertext"
+        );
+        assert_eq!(
+            ss1, ss2,
+            "Same (EK, rand) must produce an identical shared secret"
+        );
+
+        // Cross-check: both ciphertexts decapsulate to the same secret
+        let ss_dec1 = kem768_decapsulate(dk, ct1);
+        let ss_dec2 = kem768_decapsulate(dk, ct2);
+        assert_eq!(ss_dec1, ss_dec2);
+    }
 }
