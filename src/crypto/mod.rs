@@ -260,7 +260,9 @@ mod ml_kem_768_tests {
 
     // ── Fixed randomness for reproducible tests ──────────────────────────────
     const KEYGEN_RAND_A: [u8; 64] = [0x11u8; 64];
+    const KEYGEN_RAND_B: [u8; 64] = [0x22u8; 64];
     const ENCAP_RAND_1: [u8; 32] = [0xAAu8; 32];
+    const ENCAP_RAND_2: [u8; 32] = [0xBBu8; 32];
 
     #[test]
     fn test_keygen_output_sizes_match_fips203_spec() {
@@ -341,5 +343,33 @@ mod ml_kem_768_tests {
         let ss_dec1 = kem768_decapsulate(dk, ct1);
         let ss_dec2 = kem768_decapsulate(dk, ct2);
         assert_eq!(ss_dec1, ss_dec2);
+    }
+
+    // ── 4. KEY SEPARATION ─────────────────────────────────────────────────────
+
+    #[test]
+    fn test_different_keygen_randomness_produces_different_keys() {
+        let (ek1, dk1) = kem768_keygen(KEYGEN_RAND_A);
+        let (ek2, dk2) = kem768_keygen(KEYGEN_RAND_B);
+
+        assert_ne!(ek1, ek2, "Different randomness must produce different EKs");
+        assert_ne!(dk1, dk2, "Different randomness must produce different DKs");
+    }
+
+    #[test]
+    fn test_different_encap_randomness_produces_different_ct_and_ss() {
+        let (ek, _dk) = kem768_keygen(KEYGEN_RAND_A);
+
+        let (ct1, ss1) = kem768_encapsulate(ek, ENCAP_RAND_1);
+        let (ct2, ss2) = kem768_encapsulate(ek, ENCAP_RAND_2);
+
+        assert_ne!(
+            ct1, ct2,
+            "Different encap randomness must produce different ciphertexts"
+        );
+        assert_ne!(
+            ss1, ss2,
+            "Different encap randomness must produce different shared secrets"
+        );
     }
 }
