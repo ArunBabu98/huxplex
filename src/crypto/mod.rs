@@ -260,6 +260,7 @@ mod ml_kem_768_tests {
 
     // ── Fixed randomness for reproducible tests ──────────────────────────────
     const KEYGEN_RAND_A: [u8; 64] = [0x11u8; 64];
+    const ENCAP_RAND_1: [u8; 32] = [0xAAu8; 32];
 
     #[test]
     fn test_keygen_output_sizes_match_fips203_spec() {
@@ -286,6 +287,20 @@ mod ml_kem_768_tests {
             DK_SIZE,
             "Decapsulation key must be {} bytes",
             DK_SIZE
+        );
+    }
+    // ── 2. CORRECTNESS: shared secret agreement ───────────────────────────────
+
+    #[test]
+    fn test_encap_decap_roundtrip_both_sides_agree() {
+        let (ek, dk) = kem768_keygen(KEYGEN_RAND_A);
+
+        let (ct, ss_encap) = kem768_encapsulate(ek, ENCAP_RAND_1);
+        let ss_decap = kem768_decapsulate(dk, ct);
+
+        assert_eq!(
+            ss_encap, ss_decap,
+            "Encapsulator and decapsulator must derive an identical 32-byte shared secret"
         );
     }
 }
