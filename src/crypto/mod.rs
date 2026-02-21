@@ -372,4 +372,76 @@ mod ml_kem_768_tests {
             "Different encap randomness must produce different shared secrets"
         );
     }
+
+    // ── 5. IND-CCA2 / IMPLICIT REJECTION ─────────────────────────────────────
+    //
+    // ML-KEM (FIPS 203) provides implicit rejection: a tampered ciphertext or
+    // wrong key does NOT return an error — it returns a pseudorandom value
+    // derived from H(dk, ct). This is the IND-CCA2 security guarantee.
+    // The correct behaviour is: shared secrets DIFFER, not that decap errors.
+
+    #[test]
+    fn test_wrong_decap_key_yields_different_shared_secret_implicit_rejection() {
+        let (ek_a, _dk_a) = kem768_keygen(KEYGEN_RAND_A);
+        let (_ek_b, dk_b) = kem768_keygen(KEYGEN_RAND_B);
+
+        let (ct, ss_correct) = kem768_encapsulate(ek_a, ENCAP_RAND_1);
+
+        // Wrong key: decapsulation succeeds but yields a DIFFERENT pseudorandom secret
+        let ss_wrong = kem768_decapsulate(dk_b, ct);
+
+        assert_ne!(
+            ss_correct, ss_wrong,
+            "Wrong decap key must yield a different shared secret (IND-CCA2 implicit rejection)"
+        );
+    }
+
+    #[test]
+    fn test_single_bit_flip_in_ciphertext_yields_different_shared_secret() {
+        let (ek, dk) = kem768_keygen(KEYGEN_RAND_A);
+        let (ct, ss_correct) = kem768_encapsulate(ek, ENCAP_RAND_1);
+
+        // Flip one bit in the ciphertext (first byte)
+        let mut tampered = ct;
+        tampered[0] ^= 0x01;
+        let ss_tampered = kem768_decapsulate(dk, tampered);
+
+        assert_ne!(
+            ss_correct, ss_tampered,
+            "Single-bit flip must produce a different shared secret (IND-CCA2)"
+        );
+    }
+
+    #[test]
+    fn test_last_byte_flip_in_ciphertext_yields_different_shared_secret() {
+        let (ek, dk) = kem768_keygen(KEYGEN_RAND_A);
+        let (ct, ss_correct) = kem768_encapsulate(ek, ENCAP_RAND_1);
+
+        let mut tampered = ct;
+        tampered[CT_SIZE - 1] ^= 0xFF;
+        let ss_tampered = kem768_decapsulate(dk, tampered);
+
+        assert_ne!(
+            ss_correct, ss_tampered,
+            "Last-byte flip must produce a different shared secret"
+        );
+    }
+
+    #[test]
+    fn test_all_zeros_ciphertext_yields_different_shared_secret() {
+        let (_ek, dk) = kem768_keygen(KEYGEN_RAND_A);
+        let (ek2, dk2) = kem768_keygen(KEYGEN_RAND_B);
+
+        let (ct_valid, ss_valid) = kem768_encapsulate(ek2, ENCAP_RAND_1);
+        let ss_valid_dec = kem768_decapsulate(dk2, ct_valid);
+
+        // All-zero ciphertext against a real key
+        let ss_zero_ct = kem768_decapsulate(dk, [0u8; CT_SIZE]);
+
+        // Must be different from any legitimately encapsulated secret
+        assert_ne!(
+            ss_valid_dec, ss_zero_ct,
+            "All-zero ciphertext must not accidentally match a valid shared secret"
+        );
+    }
 }
