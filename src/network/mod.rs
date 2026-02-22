@@ -489,165 +489,165 @@ mod network_tests {
     //     // PeerId → GossipMessage → DHT entry binding
     //     // ══════════════════════════════════════════════════════════════════════════
 
-    //     #[test]
-    //     fn test_full_node_identity_pipeline() {
-    //         // Simulates a new node joining the network:
-    //         // 1. Generates ML-DSA-44 identity keypair
-    //         // 2. Derives PeerId from it
-    //         // 3. Publishes a DHT entry announcing its address
-    //         // 4. Signs and broadcasts a gossip message on a shard topic
+    #[test]
+    fn test_full_node_identity_pipeline() {
+        // Simulates a new node joining the network:
+        // 1. Generates ML-DSA-44 identity keypair
+        // 2. Derives PeerId from it
+        // 3. Publishes a DHT entry announcing its address
+        // 4. Signs and broadcasts a gossip message on a shard topic
 
-    //         let kp = make_keypair(0xAA);
-    //         let pid = PeerId::from_ml_dsa_pk(kp.public_key());
+        let kp = make_keypair(0xAA);
+        let pid = PeerId::from_ml_dsa_pk(kp.public_key().clone());
 
-    //         // Step 3: DHT announcement
-    //         let dht = DhtEntry::sign(&kp, pid.0.to_vec(), b"10.0.0.1:30333".to_vec()).unwrap();
-    //         assert!(dht.verify().unwrap(), "Node DHT announcement must be valid");
+        // Step 3: DHT announcement
+        let dht = DhtEntry::sign(&kp, pid.id.to_vec(), b"10.0.0.1:30333".to_vec()).unwrap();
+        assert!(dht.verify().unwrap(), "Node DHT announcement must be valid");
 
-    //         // Step 4: Gossip broadcast
-    //         let msg = GossipMessage::sign(
-    //             &kp,
-    //             GossipTopic::shard_blocks(0),
-    //             "mainnet",
-    //             b"genesis-block-hash".to_vec(),
-    //         )
-    //         .unwrap();
-    //         assert!(msg.verify().unwrap(), "Node gossip broadcast must be valid");
+        // Step 4: Gossip broadcast
+        let msg = GossipMessage::sign(
+            &kp,
+            GossipTopic::shard_blocks(0),
+            "mainnet",
+            b"genesis-block-hash".to_vec(),
+        )
+        .unwrap();
+        assert!(msg.verify().unwrap(), "Node gossip broadcast must be valid");
 
-    //         // Peer ID consistency: the same ML-DSA-44 key drives both
-    //         let pid_from_dht_signer = PeerId::from_ml_dsa_pk(&dht.signer_pk);
-    //         assert_eq!(
-    //             pid, pid_from_dht_signer,
-    //             "DHT signer PeerId must match node PeerId"
-    //         );
+        // Peer ID consistency: the same ML-DSA-44 key drives both
+        let pid_from_dht_signer = PeerId::from_ml_dsa_pk(dht.signer_pk);
+        assert_eq!(
+            pid, pid_from_dht_signer,
+            "DHT signer PeerId must match node PeerId"
+        );
 
-    //         let pid_from_msg_sender = PeerId::from_ml_dsa_pk(&msg.from);
-    //         assert_eq!(
-    //             pid, pid_from_msg_sender,
-    //             "Gossip sender PeerId must match node PeerId"
-    //         );
+        let pid_from_msg_sender = PeerId::from_ml_dsa_pk(msg.from);
+        assert_eq!(
+            pid, pid_from_msg_sender,
+            "Gossip sender PeerId must match node PeerId"
+        );
 
-    //         println!("✓ Full node identity pipeline: keygen → PeerId → DHT → GossipMessage");
-    //     }
+        println!("✓ Full node identity pipeline: keygen → PeerId → DHT → GossipMessage");
+    }
 
-    //     #[test]
-    //     fn test_ten_validators_each_with_unique_peer_id_and_valid_dht_entries() {
-    //         // Simulates 10 validators in a Q-BFT set.
-    //         // Each must have a unique PeerId and valid authenticated DHT presence.
-    //         let validators: Vec<_> = (1u8..=10)
-    //             .map(|i| {
-    //                 let kp = make_keypair(i);
-    //                 let pid = PeerId::from_ml_dsa_pk(kp.public_key());
-    //                 let dht = DhtEntry::sign(
-    //                     &kp,
-    //                     pid.0.to_vec(),
-    //                     format!("192.168.1.{}:30333", i).into_bytes(),
-    //                 )
-    //                 .unwrap();
-    //                 (pid, dht)
-    //             })
-    //             .collect();
+    #[test]
+    fn test_ten_validators_each_with_unique_peer_id_and_valid_dht_entries() {
+        // Simulates 10 validators in a Q-BFT set.
+        // Each must have a unique PeerId and valid authenticated DHT presence.
+        let validators: Vec<_> = (1u8..=10)
+            .map(|i| {
+                let kp = make_keypair(i);
+                let pid = PeerId::from_ml_dsa_pk(kp.public_key().clone());
+                let dht = DhtEntry::sign(
+                    &kp,
+                    pid.id.to_vec(),
+                    format!("192.168.1.{}:30333", i).into_bytes(),
+                )
+                .unwrap();
+                (pid, dht)
+            })
+            .collect();
 
-    //         // All PeerIds distinct
-    //         for i in 0..validators.len() {
-    //             for j in (i + 1)..validators.len() {
-    //                 assert_ne!(
-    //                     validators[i].0, validators[j].0,
-    //                     "Validators {i} and {j} must have distinct PeerIds"
-    //                 );
-    //             }
-    //         }
+        // All PeerIds distinct
+        for i in 0..validators.len() {
+            for j in (i + 1)..validators.len() {
+                assert_ne!(
+                    validators[i].0, validators[j].0,
+                    "Validators {i} and {j} must have distinct PeerIds"
+                );
+            }
+        }
 
-    //         // All DHT entries valid
-    //         for (i, (_, dht)) in validators.iter().enumerate() {
-    //             assert!(
-    //                 dht.verify().unwrap(),
-    //                 "Validator {i} DHT entry must be valid"
-    //             );
-    //         }
+        // All DHT entries valid
+        for (i, (_, dht)) in validators.iter().enumerate() {
+            assert!(
+                dht.verify().unwrap(),
+                "Validator {i} DHT entry must be valid"
+            );
+        }
 
-    //         println!("✓ 10-validator set: all PeerIds unique, all DHT entries authenticated");
-    //     }
+        println!("✓ 10-validator set: all PeerIds unique, all DHT entries authenticated");
+    }
 
-    //     #[test]
-    //     fn test_cross_shard_gossip_messages_use_different_contexts() {
-    //         // A validator proposing on shard 0 must use a different context than shard 1.
-    //         // Tests that no shard can accidentally validate another shard's messages.
-    //         let kp = make_keypair(0x01);
-    //         let payload = b"block-proposal".to_vec();
+    #[test]
+    fn test_cross_shard_gossip_messages_use_different_contexts() {
+        // A validator proposing on shard 0 must use a different context than shard 1.
+        // Tests that no shard can accidentally validate another shard's messages.
+        let kp = make_keypair(0x01);
+        let payload = b"block-proposal".to_vec();
 
-    //         let msg_s0 = GossipMessage::sign(
-    //             &kp,
-    //             GossipTopic::shard_blocks(0),
-    //             "mainnet",
-    //             payload.clone(),
-    //         )
-    //         .unwrap();
-    //         let msg_s1 =
-    //             GossipMessage::sign(&kp, GossipTopic::shard_blocks(1), "mainnet", payload).unwrap();
+        let msg_s0 = GossipMessage::sign(
+            &kp,
+            GossipTopic::shard_blocks(0),
+            "mainnet",
+            payload.clone(),
+        )
+        .unwrap();
+        let msg_s1 =
+            GossipMessage::sign(&kp, GossipTopic::shard_blocks(1), "mainnet", payload).unwrap();
 
-    //         // Each verifies on its own shard
-    //         assert!(msg_s0.verify().unwrap(), "Shard 0 message must verify");
-    //         assert!(msg_s1.verify().unwrap(), "Shard 1 message must verify");
+        // Each verifies on its own shard
+        assert!(msg_s0.verify().unwrap(), "Shard 0 message must verify");
+        assert!(msg_s1.verify().unwrap(), "Shard 1 message must verify");
 
-    //         // Swap topics: cross-shard injection must fail
-    //         let mut swapped = msg_s0.clone();
-    //         swapped.topic = GossipTopic::shard_blocks(1);
-    //         assert!(
-    //             !swapped.verify().unwrap(),
-    //             "Shard 0 message with shard 1 topic must fail — no cross-shard injection"
-    //         );
+        // Swap topics: cross-shard injection must fail
+        let mut swapped = msg_s0.clone();
+        swapped.topic = GossipTopic::shard_blocks(1);
+        assert!(
+            !swapped.verify().unwrap(),
+            "Shard 0 message with shard 1 topic must fail — no cross-shard injection"
+        );
 
-    //         println!("✓ Cross-shard gossip injection prevented by topic-bound context strings");
-    //     }
+        println!("✓ Cross-shard gossip injection prevented by topic-bound context strings");
+    }
 
     //     // ══════════════════════════════════════════════════════════════════════════
     //     // GROUP 7: Overhead documentation
     //     // ══════════════════════════════════════════════════════════════════════════
 
-    //     #[test]
-    //     fn test_network_identity_and_message_overhead() {
-    //         let kp = make_keypair(0x01);
-    //         let pid = PeerId::from_ml_dsa_pk(kp.public_key());
-    //         let msg = GossipMessage::sign(
-    //             &kp,
-    //             GossipTopic::shard_blocks(0),
-    //             "mainnet",
-    //             b"block-hash".to_vec(),
-    //         )
-    //         .unwrap();
+    #[test]
+    fn test_network_identity_and_message_overhead() {
+        let kp = make_keypair(0x01);
+        let pid = PeerId::from_ml_dsa_pk(kp.public_key().clone());
+        let msg = GossipMessage::sign(
+            &kp,
+            GossipTopic::shard_blocks(0),
+            "mainnet",
+            b"block-hash".to_vec(),
+        )
+        .unwrap();
 
-    //         println!("=== Huxplex L0 Network Identity Overhead ===");
-    //         println!(
-    //             "PeerId:             {:3} B  (SHAKE-256(ML-DSA-44 PK)[0..32])",
-    //             pid.0.len()
-    //         );
-    //         println!(
-    //             "ML-DSA-44 PK:      {:4} B  (gossip message sender identity)",
-    //             kp.public_key().bytes.len()
-    //         );
-    //         println!(
-    //             "ML-DSA-44 Sig:     {:4} B  (per gossip message)",
-    //             msg.sig.bytes.len()
-    //         );
-    //         println!(
-    //             "Topic string:       {:3} B  ('{}')",
-    //             msg.topic.as_str().len(),
-    //             msg.topic.as_str()
-    //         );
-    //         println!(
-    //             "Context string:     {:3} B  ('{}')",
-    //             gossip_context("mainnet", &msg.topic).len(),
-    //             std::str::from_utf8(&gossip_context("mainnet", &msg.topic)).unwrap()
-    //         );
-    //         println!("Ed25519 sig equiv:   64 B");
-    //         println!(
-    //             "PQ gossip overhead: {}x per message signature",
-    //             msg.sig.bytes.len() / 64
-    //         );
+        println!("=== Huxplex L0 Network Identity Overhead ===");
+        println!(
+            "PeerId:             {:3} B  (SHAKE-256(ML-DSA-44 PK)[0..32])",
+            pid.id.len()
+        );
+        println!(
+            "ML-DSA-44 PK:      {:4} B  (gossip message sender identity)",
+            kp.public_key().bytes.len()
+        );
+        println!(
+            "ML-DSA-44 Sig:     {:4} B  (per gossip message)",
+            msg.sig.bytes.len()
+        );
+        println!(
+            "Topic string:       {:3} B  ('{}')",
+            msg.topic.as_str().len(),
+            msg.topic.as_str()
+        );
+        println!(
+            "Context string:     {:3} B  ('{}')",
+            gossip_context("mainnet", &msg.topic).len(),
+            std::str::from_utf8(&gossip_context("mainnet", &msg.topic)).unwrap()
+        );
+        println!("Ed25519 sig equiv:   64 B");
+        println!(
+            "PQ gossip overhead: {}x per message signature",
+            msg.sig.bytes.len() / 64
+        );
 
-    //         assert_eq!(pid.0.len(), 32);
-    //         assert_eq!(msg.sig.bytes.len(), 2420);
-    //         assert_eq!(kp.public_key().bytes.len(), 1312);
-    //     }
+        assert_eq!(pid.id.len(), 32);
+        assert_eq!(msg.sig.bytes.len(), 2420);
+        assert_eq!(kp.public_key().bytes.len(), 1312);
+    }
 }
