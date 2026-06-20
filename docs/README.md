@@ -41,6 +41,7 @@ conflict with an Architecture Decision Record (ADR).
 | [`11-research/`](11-research/) | Open problems, future research, literature review |
 | [`12-business/`](12-business/) | Ecosystem growth, grants, partnerships, adoption |
 | [`13-operational/`](13-operational/) | Validator guide, node ops, monitoring, disaster recovery |
+| [`14-use-cases/`](14-use-cases/) | Use cases, applications & impacts — by field, horizon (immediate/futuristic/very ambitious) and difficulty (easy/intermediate/hard); plus society, human and philosophical impact |
 | [`adr/`](adr/) | Architecture Decision Records |
 | [`rfc/`](rfc/) | RFC process + template |
 | [`diagrams/`](diagrams/) | Mermaid architecture diagrams |
