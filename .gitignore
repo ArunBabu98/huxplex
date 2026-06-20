@@ -1,1 +1,21 @@
+# Rust
 /target
+**/*.rs.bk
+*.pdb
+
+# Cargo
+# Cargo.lock IS committed (this crate will produce a node binary and we want
+# reproducible builds). Do not ignore it.
+
+# Editor / OS
+.DS_Store
+*.swp
+*~
+.idea/
+
+# Local secrets / keys — never commit key material
+*.key
+*.pem
+/keys/
+/secrets/
+.env

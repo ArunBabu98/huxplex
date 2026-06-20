@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/ArunBabu98/huxplex/security/advisories/new
+    about: Report security issues privately — never in a public issue. See SECURITY.md.
+  - name: Design proposal / RFC
+    url: https://github.com/ArunBabu98/huxplex/tree/master/docs/rfc
+    about: For protocol/design changes, open an RFC rather than an issue.

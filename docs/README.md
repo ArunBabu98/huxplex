@@ -42,6 +42,7 @@ conflict with an Architecture Decision Record (ADR).
 | [`12-business/`](12-business/) | Ecosystem growth, grants, partnerships, adoption |
 | [`13-operational/`](13-operational/) | Validator guide, node ops, monitoring, disaster recovery |
 | [`14-use-cases/`](14-use-cases/) | Use cases, applications & impacts — by field, horizon (immediate/futuristic/very ambitious) and difficulty (easy/intermediate/hard); plus society, human and philosophical impact |
+| [`15-specifications/`](15-specifications/) | Normative implementation specs — data model & encoding, cryptography (context registry + KATs), HRM state transition, consensus, network wire protocol, v1 scope contract |
 | [`adr/`](adr/) | Architecture Decision Records |
 | [`rfc/`](rfc/) | RFC process + template |
 | [`diagrams/`](diagrams/) | Mermaid architecture diagrams |

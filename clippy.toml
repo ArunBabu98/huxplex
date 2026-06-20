@@ -1,0 +1,13 @@
+# Clippy configuration. Lint levels themselves are set in CI
+# (`cargo clippy -- -D warnings`) and may later be promoted to crate-level
+# attributes in src/lib.rs. This file holds tunable thresholds.
+
+# Cryptographic and protocol code legitimately uses fixed-size byte constants
+# (1312, 2420, 2560, 1184, 2400, 1088, ...). Don't flag these as "magic numbers"
+# wholesale; the spec in docs/15-specifications/02-cryptography-spec.md is the
+# source of truth and tests assert them.
+allowed-duplicate-crates = []
+
+# Be conservative about cognitive complexity in consensus/crypto paths; prefer
+# explicit, auditable code over clever code.
+too-many-arguments-threshold = 8

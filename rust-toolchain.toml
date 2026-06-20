@@ -1,0 +1,7 @@
+# Pinned toolchain for reproducible builds.
+# Edition 2024 (Cargo.toml) requires Rust >= 1.85. We pin a concrete stable
+# release as the MSRV so CI, contributors, and audits all build identically.
+[toolchain]
+channel = "1.85.0"
+components = ["rustfmt", "clippy"]
+profile = "default"

@@ -16,6 +16,11 @@ future maintainers inherit the *reasoning*, not just the conclusion (Principle #
 | [0007](0007-sentience-framing.md) | "Sentience" as a bounded, off-consensus proxy metric | Accepted |
 | [0008](0008-vm-engine.md) | HuxVM: wasmi → wasmtime, behind a `Vm` trait | Accepted |
 | [0009](0009-parallel-execution.md) | Block-STM optimistic parallelism, HAOT as hint | Accepted |
+| [0010](0010-hash-function-domains.md) | Hash function per domain (SHAKE-256 default, BLAKE3 for bulk state) | Accepted |
+| [0011](0011-canonical-serialization.md) | Canonical deterministic serialization (postcard + `Codec` trait) | Accepted |
+| [0012](0012-network-transport.md) | Network transport: rust-libp2p/QUIC + PQ-hybrid handshake | Accepted |
+| [0013](0013-did-huxplex-method.md) | `did:huxplex` self-certifying, chain-anchored DID method | Accepted |
+| [0014](0014-validator-key-management.md) | Validator key management & custody (hot/cold tiers) | Accepted |
 
 ## Process
 
