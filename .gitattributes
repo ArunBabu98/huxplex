@@ -1,0 +1,12 @@
+# Normalize line endings to LF in the repository.
+#
+# `rustfmt.toml` sets `newline_style = "Unix"` and CI runs `cargo fmt --check`, so CRLF files
+# fail the build regardless of the contributor's platform. Enforcing it here stops the problem
+# recurring on Windows checkouts rather than catching it in CI.
+* text=auto eol=lf
+
+# Binary files: never touch.
+*.png binary
+*.jpg binary
+*.pdf binary
+*.ico binary
