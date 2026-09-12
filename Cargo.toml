@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-libcrux-ml-dsa = "0.0.7"
+libcrux-ml-dsa = "0.0.9"
 libcrux-ml-kem = "0.0.7"
 hkdf = "0.12.4"
 sha2 = "0.10.9"
