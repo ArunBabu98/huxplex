@@ -20,8 +20,13 @@ conflict with an Architecture Decision Record (ADR).
 2. Read [`01-vision/`](01-vision/) for the *why*.
 3. Read [`02-architecture/`](02-architecture/) for the *what* and [`adr/`](adr/) for the
    *why this and not that*.
-4. Builders go to [`09-roadmap/`](09-roadmap/), [`10-development/`](10-development/),
-   [`backlog/`](backlog/), and the [`process/`](process/) playbooks.
+4. Builders go to [`16-action-plan.md`](16-action-plan.md) — the gated build order and the
+   tests that unlock each stage — then [`09-roadmap/`](09-roadmap/),
+   [`10-development/`](10-development/), [`backlog/`](backlog/), and the
+   [`process/`](process/) playbooks.
+5. For competitive and research context, read [`17-landscape-2026.md`](17-landscape-2026.md).
+   For the founder's original thinking, read [`brainstorming/`](brainstorming/)
+   (non-normative).
 
 ## Map
 
@@ -43,6 +48,9 @@ conflict with an Architecture Decision Record (ADR).
 | [`13-operational/`](13-operational/) | Validator guide, node ops, monitoring, disaster recovery |
 | [`14-use-cases/`](14-use-cases/) | Use cases, applications & impacts — by field, horizon (immediate/futuristic/very ambitious) and difficulty (easy/intermediate/hard); plus society, human and philosophical impact |
 | [`15-specifications/`](15-specifications/) | Normative implementation specs — data model & encoding, cryptography (context registry + KATs), HRM state transition, consensus, network wire protocol, v1 scope contract |
+| [`16-action-plan.md`](16-action-plan.md) | **The build order** — gated development plan; each gate's high-concept tests must pass before dependent work may begin |
+| [`17-landscape-2026.md`](17-landscape-2026.md) | What the rest of the world shipped by 2026 — agent payments, agent identity, intent chains, PQC, consensus, AI governance; where Huxplex aligns, rivals, and is behind |
+| [`brainstorming/`](brainstorming/) | **Non-normative.** Founder's notes and ideas-in-progress, plus their reconciliation against this blueprint |
 | [`adr/`](adr/) | Architecture Decision Records |
 | [`rfc/`](rfc/) | RFC process + template |
 | [`diagrams/`](diagrams/) | Mermaid architecture diagrams |
@@ -57,6 +65,16 @@ conflict with an Architecture Decision Record (ADR).
 - **HuxVM** — deterministic WebAssembly execution environment.
 - **TCHAO** — Transaction Classification by Historical Access Objects (parallel scheduler).
 - **Work Visa** — verifiable credential authorizing an AI agent to act, with constraints.
+- **HCP/1** — Huxplex Connector Protocol: how the substrate and agents cause and observe effects
+  in external systems ([spec](15-specifications/07-connector-protocol.md)).
+- **Connector** — a registered adapter to one external system. An *oracle* boundary, not a
+  custody boundary: it holds no funds or credentials and cannot create authority.
+- **Authorization Envelope** — a single-purpose, attenuated, expiring capability derived from a
+  visa (`bounds ⊆ visa bounds`) and issued to exactly one connector.
+- **Connector Session** — the durable object binding {intent, visa, connector} for the intent's
+  entire lifecycle, outliving connections, processes, and restarts.
+- **Evidence Class** — how strongly an external outcome is evidenced:
+  `SelfReported < Relayed < Notarized < FirstParty ≤ Cryptographic`.
 - **HUX / SVRGN / SNTNC** — the triple-token model (machine utility / human sovereignty / agent merit).
 
 > ⚠️ **Source-of-truth note.** Two prior descriptions of Huxplex exist: the repository

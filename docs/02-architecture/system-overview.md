@@ -43,7 +43,25 @@ graph TD
     end
 
     L4 --> L3 --> L2 --> L1 --> L0
+
+    subgraph EXT["Outside the substrate"]
+        APPS[Applications built ON Huxplex<br/>an app is not Huxplex]
+        CONN[Connectors — HCP/1<br/>commerce · payment · shipping · devices]
+        WORLD[External systems]
+    end
+
+    APPS -->|intents| L4
+    L3 -.->|Authorization Envelope<br/>bounds ⊆ visa| CONN
+    CONN --> WORLD
+    WORLD --> CONN
+    CONN -.->|typed, classed,<br/>signed attestations| L2
 ```
+
+> **The connector boundary.** Connectors are **outside** the layer stack, not a sixth layer.
+> Authority flows down to them from L3 as an attenuated envelope; evidence flows back up to L2
+> as a typed attestation. Nothing a connector returns can create or widen authority
+> ([ADR-0015](../adr/0015-connector-architecture.md) invariant A2). Applications are likewise
+> outside: *"the app is built on top of Huxplex. The app itself is not Huxplex."*
 
 | Layer | Subsystems | Spec | Status |
 |---|---|---|---|
@@ -52,6 +70,7 @@ graph TD
 | L2 Execution/Economy | HuxVM, TCHAO, fees, tokens | [execution-engine](execution-engine.md), [transaction-model](transaction-model.md), [`06-tokenomics/`](../06-tokenomics/) | 🟡 |
 | L3 Identity/Gov | DID, Work Visa, governance, provenance | [`05-identity/`](../05-identity/), [`07-governance/`](../07-governance/) | 🟡 |
 | L4 Apps/Agents | agents, solvers, wallets, marketplaces | [`04-ai-economy/`](../04-ai-economy/) | 🟡 |
+| *(outside)* Connectors | external-system adapters, sessions, evidence | [connector protocol](../15-specifications/07-connector-protocol.md), [ADR-0015](../adr/0015-connector-architecture.md), [ADR-0016](../adr/0016-evidence-and-attestation.md) | 🟡 Phase 3–4 |
 
 ## End-to-end lifecycle of a transaction/intent
 
@@ -99,6 +118,10 @@ sequenceDiagram
 | **DhtEntry** | authenticated DHT record | `…:dht:entry:v1` 🟢 |
 | **Work Visa** | agent capability credential | issuer-signed VC |
 | **Provenance record** | human-origin attestation | creator-signed |
+| **Authorization Envelope** | single-purpose attenuated capability for one connector action; `bounds ⊆ visa` | `…:connector:envelope:v1` |
+| **Connector Session** | durable object binding {intent, visa, connector} for the intent's whole lifecycle | state object |
+| **Connector Event** | gapless, sequenced lifecycle event from a connector | `…:connector:event:v1` |
+| **Attestation** | typed, evidence-classed record of an external effect | connector-signed |
 
 (🟢 = context string already defined and tested in `src/`.)
 
@@ -120,6 +143,9 @@ Huxplex is built as a **single Rust workspace of cohesive crates** (a "modular m
 - **Determinism** is enforced at L2 (HuxVM) and required for L1 state transitions.
 - **Observability**: every layer exports metrics (the chain is a "dataset generator").
 - **Pruning**: witness/signature separation at L1 keeps state bounded despite large PQ sigs.
+- **Authority precedence**: authority is resolved at L3 *before* any effect is attempted, and no
+  downstream component — executor, connector, or external system — can widen it
+  (Principle #11, "the policy wins").
 
 ---
 

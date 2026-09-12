@@ -79,9 +79,35 @@ Realistic: **~12–18 people** including the Phase-2 base.
 - Whether novelty scoring converges (must be answered before SNTNC goes economic).
 - MEV-resistant intent matching.
 
+## Connectors — the external-world pathway
+
+Phase 3 introduces [HCP/1](../15-specifications/07-connector-protocol.md)
+([ADR-0015](../adr/0015-connector-architecture.md),
+[ADR-0016](../adr/0016-evidence-and-attestation.md)), shipped as a **profile ladder**, one rung at
+a time. Do not start a rung before the previous one has soaked.
+
+| Profile | Capability | Phase |
+|---|---|---|
+| **0 — Observer** | Read-only external state; emits signed events. Cannot cause effects | 3, first delivery |
+| **1 — Effector** | `Reserve` / `Commit` / `Compensate` — bounded external obligations | 3, after Profile 0 soak |
+| **2 — Settler** | `Settle` on external rails (bank/UPI/card/stablecoin) via bounded mandates | 3–4 |
+| **3 — Custodial** | Holds on-chain value — **bridge-shaped**; inherits the bridge deferral in full | **4 at the earliest**, governance super-majority |
+
+Profile 0 is genuinely useful alone (shipment tracking, price monitoring, status reconciliation)
+and can cause no harm, which makes it the right first delivery. Discipline for this phase:
+**one connector category, completely, before a second is started.**
+
+Additional Phase 3 connector work: the connector registry with bonds and legal-operator records;
+the evidence schema registry; continuous conformance testing; and interoperability profiles for
+MCP, x402 and AP2 mandates rather than proprietary equivalents.
+
 ## Exit criteria (Phase 3 → Phase 4 gate)
 
 - [ ] Agents transacting under enforced Work Visa constraints with fast revocation.
+- [ ] Profile 0 and Profile 1 connectors live, with G11-T1…T14 green — including **G11-T6**
+      (colluding agent + connector cannot exceed the visa) and **G11-T7** (session survives
+      restart, agent death, and disconnection).
+- [ ] No connector has ever widened authority, in production or in adversarial simulation.
 - [ ] Intents/solvers + escrow + dispute working; zk-STARK settlement for verifiable tasks.
 - [ ] Reputation/SNTNC live, bounded, decaying, with collusion detection — validated by adversarial sim.
 - [ ] Personhood-gated SVRGN making the veto meaningful; agent governance under veto.

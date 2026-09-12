@@ -44,13 +44,51 @@ A Work Visa grants a typed **capability set** with **constraints**, e.g.:
 WorkVisa {
   holder: did:huxplex:…(agent),
   issuer: did:huxplex:…(human/DAO),
+  purpose: "Purchase Canon DSLR",          // scope-binding; the least-implemented control
+                                           // industry-wide (37% adoption, 2026)
   capabilities: [ GPU.Purchase, Dataset.Acquire, Market.Trade(pair=HUX/SNTNC), … ],
-  constraints: { max_spend_per_epoch: 1000 HUX, max_tx_value: 100 HUX, allowed_kinds: […] },
+  constraints: {
+    // positive bounds
+    max_tx_value, min_tx_value, max_spend_per_epoch,
+    allowed_kinds, allowed_categories, allowed_counterparties,
+    max_ancillary: { shipping, tax, fees },
+    deadline,
+    // NEGATIVE capabilities — deny by default, and the half that matters most
+    subscription:              false,
+    recurring_payment:         false,
+    transfer_to_third_party:   false,
+    refund_authority:          true,
+    automatic_execution:       true,
+  },
+  required_evidence_class: FirstParty,      // what proof settles this — ADR-0016
+  remediation_policy: [ Cancel, SeekReplacement, RequestRefund, NotifyUser ],
   expiry: block_height,
   revocation_ref: …,
   issuer_sig: ML-DSA-44 over issuer context,
 }
 ```
+
+This schema follows the founder's 14-field formulation
+([`brainstorming/`](../brainstorming/00-arun-babu-founding-notes.md) §Step 4) rather than the
+earlier 4-field sketch. Three additions carry most of the weight:
+
+- **`purpose`** — scope binding. Per 2026 industry data this is the *least* implemented agent
+  control anywhere (37%), and it is what distinguishes a bounded capability from a blank cheque.
+- **Negative capabilities, denied by default.** "Cannot create a subscription", "cannot set up
+  recurring payment", "cannot transfer to a third party." Positive bounds alone do not prevent an
+  agent from converting a one-off authorization into an ongoing obligation.
+- **`required_evidence_class` and `remediation_policy`** — the user decides what proof is good
+  enough, and what the agent may do when a constraint breaks *after* settlement.
+
+> *"This is the difference between giving an AI your credit card and giving an AI a bounded
+> economic capability."*
+
+### Attenuation to external effects
+
+A visa is never handed to a connector. For each external action, L3 derives a single-purpose
+**Authorization Envelope** with `bounds(envelope) ⊆ bounds(visa)`, naming exactly one connector
+and one action class. See [ADR-0015](../adr/0015-connector-architecture.md) and the
+[connector protocol](../15-specifications/07-connector-protocol.md) §5.
 
 Constraints are **enforced in HuxVM** when the agent's transactions execute — not merely
 advisory. A tx exceeding `max_spend_per_epoch` is rejected by the Visa's logic script. This is
@@ -71,6 +109,30 @@ stateDiagram-v2
     Revoked --> [*]
     Expired --> [*]
 ```
+
+### Obligations do not end at settlement
+
+An agent's work frequently continues *after* payment clears. In the founder's worked example the
+agent monitors an 8-day delivery, detects a breach on day 12, and acts on it. The lifecycle above
+covers the agent; the **intent** has its own, longer lifecycle, carried by a
+[Connector Session](../15-specifications/07-connector-protocol.md) §4:
+
+```
+settled → monitoring (shipped → in_transit → delivered)
+        → breach detected (delivery 12 days > 8-day constraint)
+        → remediation, but only what the visa authorized:
+             cancel · seek replacement · request refund · notify user
+```
+
+Three consequences for agent design:
+
+1. **The session, not the agent process, owns the lifecycle.** A session survives node restart
+   and agent-process death, and is resumable by any instance holding the agent DID. Agents are
+   replaceable; obligations are not.
+2. **Remediation is authorized in advance.** What the agent may do on breach is a visa field, not
+   an agent decision. *"The exact behaviour could itself be part of the user's authorization."*
+3. **The intent is therefore not "buy a camera"** but *"achieve this economic outcome subject to
+   these constraints"* — including what to do when the outcome fails.
 
 ## Accountability principle
 

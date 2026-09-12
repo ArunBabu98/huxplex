@@ -53,6 +53,7 @@ Everything below is **vision-only** and is the subject of this blueprint:
 - **Storage**: RocksDB-backed state, signature pruning after finality, snapshots.
 - **Economy**: HUX/SVRGN/SNTNC tokens, staking, slashing, fee market, treasury.
 - **AI economy**: Work Visa credentials, intents/solvers, zk-STARK task proofs, agent reputation, Agentic DAOs.
+- **Connectors**: HCP/1 external-system adapters, authorization envelopes, connector sessions, typed evidence.
 - **Identity**: `did:huxplex` method, human biometric DIDs, provenance records, privacy.
 - **Governance**: Hive-Mind four-phase lifecycle, biological veto, constitutional layer.
 

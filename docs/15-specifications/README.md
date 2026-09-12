@@ -28,6 +28,7 @@ prose, not a normative requirement.
 | [04 — Consensus](04-consensus-spec.md) | Q-BFT messages, phases, the block-phase context strings, slashing conditions | 🟡 specified, unbuilt |
 | [05 — Network wire protocol](05-network-wire-protocol.md) | Handshake sequence, peer lifecycle, gossip/DHT framing | 🟡 message types exist; transport unbuilt |
 | [06 — v1 scope contract](06-v1-scope.md) | The frozen "Definition of Done" for v1 — what is in, what is explicitly out | 🟡 the anti-scope-creep contract |
+| [07 — Connector protocol (HCP/1)](07-connector-protocol.md) | How the substrate and agents cause and observe effects in external systems: sessions, authorization envelopes, evidence classes, event streams, profiles | 🟡 specified, unbuilt — **Phase 3–4, explicitly out of v1** |
 
 ## Relationship to ADRs
 

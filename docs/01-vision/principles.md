@@ -51,25 +51,35 @@ listed: earlier principles win ties.
     are *applications of* a working chain. They do not enter the consensus-critical path until
     the chain is solid. Phase gates enforce this (see [`09-roadmap/`](../09-roadmap/)).
 
+11. **The policy wins.** When an agent's judgement and its authorization disagree, the
+    authorization wins — *including* when the agent is right. Authority is resolved **before**
+    an effect is attempted, never negotiated during it, and no downstream component (executor,
+    connector, external system) can widen it. Capability is not permission: an agent may be
+    arbitrarily capable and still be unable to act outside its visa, because it was never given
+    a capability that reaches there. This is the founder's formulation
+    ([`brainstorming/`](../brainstorming/00-arun-babu-founding-notes.md) §Step 9) and the
+    project's defining invariant — tested by
+    [`16-action-plan.md`](../16-action-plan.md) G9-T1 and G11-T6.
+
 ## Governance & social principles (how we last)
 
-11. **Minimize the trusted base.** Fewer privileged roles, fewer multisig escape hatches,
+12. **Minimize the trusted base.** Fewer privileged roles, fewer multisig escape hatches,
     fewer "the foundation can…" clauses. Every privilege is a future capture vector and an
     attacker's first target.
 
-12. **Constitution over majoritarianism.** A small set of invariants (PQ-only, human veto
+13. **Constitution over majoritarianism.** A small set of invariants (PQ-only, human veto
     exists, no infinite inflation, no retroactive seizure) sit above ordinary governance and
     cannot be amended by a simple vote. Decades-survival requires limits on what any
     momentary majority can do.
 
-13. **Plutocracy resistance.** Machine governance weight is sub-linear (e.g. `log2(stake+1)`)
+14. **Plutocracy resistance.** Machine governance weight is sub-linear (e.g. `log2(stake+1)`)
     and human governance (SVRGN) is one-person-one-vote and non-purchasable. Concentration of
     tokens must not equal concentration of control.
 
-14. **Reproducibility and openness.** Reproducible builds, open specs, public research data,
+15. **Reproducibility and openness.** Reproducible builds, open specs, public research data,
     permissive license (Apache-2.0). Neutrality requires verifiability.
 
-15. **Document the tradeoff, not the certainty.** When uncertain, write down options A/B/C
+16. **Document the tradeoff, not the certainty.** When uncertain, write down options A/B/C
     with costs, pick one, and record an ADR. Future maintainers inherit reasoning, not just
     conclusions.
 

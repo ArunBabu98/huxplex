@@ -67,6 +67,41 @@ both addressed by PQ-native + hybrid + agility + family diversity.
   user funds behind a bridge (T19). This single choice removes a whole class of catastrophic
   exploits.
 
+## 8b. Connector attacks — an *oracle* boundary, not a custody boundary
+
+Connectors ([ADR-0015](../adr/0015-connector-architecture.md)) are **not** bridges, and
+classifying them correctly determines the whole defense posture:
+
+| | Bridge (§8) | Connector |
+|---|---|---|
+| Holds funds/credentials | Yes | **No** — HCP invariant A7 forbids it |
+| Can create authority | Yes, its signature mints | **No** — the visa resolves at L3 *before* invocation |
+| Worst case | Unbounded theft up to TVL | Lies about an external fact, inside a bounded envelope |
+| Recourse | None | Merchant records, chargebacks, external audit trails |
+
+Note also that the trust boundary exists with or without Huxplex: if an agent transacts on a
+user's behalf, someone is trusting the merchant. A connector under a visa **bounds and attests**
+an exposure that already existed — against the realistic alternative (an agent holding the
+user's card with unbounded API access) it is a net security improvement.
+
+| Attack | Defense |
+|---|---|
+| **Malicious connector lies about occurrence** | Evidence classes: `Relayed` proves receipt only; settlement requires the class the user demanded ([ADR-0016](../adr/0016-evidence-and-attestation.md)). Bonding + slashing for *provably* false attestations. **Bounded, not eliminated** |
+| **Connector attempts to exceed authority** | Structurally impossible: it holds an attenuated envelope, never the visa (invariants A1–A4) |
+| **Agent + connector collude** | Loss bounded above by the visa the human signed — test G11-T6. The protocol's strongest property |
+| **Connector goes silent mid-intent** | Signed heartbeats; `Active → Stale → Breached` → remediation. Silence is a detectable event, never an indefinite wait |
+| **Withheld or reordered events** | Gapless per-session `seq`; later events cannot apply over a gap |
+| **Replay / duplicate effect** | Effect Keys `H(session ‖ envelope ‖ nonce)`; connectors MUST be idempotent |
+| **Indeterminate outcome treated as failure** | `Unknown ≠ Failed` (invariant A6); reconcile before compensating, or risk double purchase |
+| **Aggregate drain via many bounded intents** | Per-connector, per-epoch `aggregate_exposure_cap` + circuit breaker |
+| **Credential theft via the substrate** | No credentials ever enter the protocol (A7). Payment uses bounded mandate references |
+| **Commerce/payment authority confusion** | Disjoint action classes; neither connector holds the other's envelope (A8) |
+| **Silent API rot** | Continuous conformance testing as a registry requirement; failure → `Probation`/`Suspended`, sessions quarantine rather than hang |
+| **Profile-3 (custodial) connectors** | **Custody-shaped — treat as a bridge.** Inherits the §8 deferral in full: governance super-majority, Phase 4 at the earliest |
+
+The genuine long-run costs here are **liability, scope and maintenance**, not theft — see
+[connector protocol](../15-specifications/07-connector-protocol.md) §12–§13.
+
 ## 9. Supply-chain attacks
 - **Malicious dependency / build-server compromise**: inject backdoor into the client.
   *Defense*: **reproducible builds** (anyone can verify binary = source), signed releases, SBOM,

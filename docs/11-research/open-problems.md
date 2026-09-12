@@ -47,6 +47,23 @@ places. Items are tagged by severity: 🔴 (blocks a phase / could invalidate a 
 | R-C8 | Should controller-less autonomous agents exist, and under what bond/constitutional gate? | 🟠 | [ai-identity](../05-identity/ai-identity.md) |
 | R-C9 | Is `log2` the right machine-vote curve, or capped/quadratic-cost? | 🟡 | [agent-governance](../04-ai-economy/agent-governance.md) |
 
+## C2. Connectors & external evidence
+
+Opened by [ADR-0015](../adr/0015-connector-architecture.md) and
+[ADR-0016](../adr/0016-evidence-and-attestation.md). Owner doc for all:
+[connector protocol](../15-specifications/07-connector-protocol.md).
+
+| ID | Problem | Sev |
+|---|---|---|
+| R-K1 | **Connector-session evidence chains are detailed purchase records in consensus state.** Can projections be committed with selective disclosure instead of plaintext? This may decide whether HCP is usable at all in regulated jurisdictions | 🔴 |
+| R-K2 | **`Notarized` may be weaker than it looks.** *k*-of-*n* connectors may all wrap the same upstream API; independence is hard to verify and easy to fake. Related to R-C3 | 🔴 |
+| R-K3 | **Reconciliation without connector cooperation.** If a connector goes dark mid-`Unknown`, who determines the truth? A second connector on the same external system is the obvious answer — and another argument for R-K2 | 🟠 |
+| R-K4 | Can Profile 1+ connectors ever be permissionless? The bridge precedent argues for permanent governance gating, which conflicts with the neutrality criterion in [mission](../01-vision/mission.md) | 🟠 |
+| R-K5 | Session rent pricing: too low invites state-growth spam, too high makes long-horizon intents (the 8-day delivery case) uneconomic | 🟡 |
+| R-K6 | Is `Cryptographic` evidence reachable for ordinary commerce, or is `FirstParty` the realistic ceiling outside a few rails? | 🟡 |
+| R-K7 | Can `Compensate` semantics be standardized per action class, or is compensation necessarily external-system-specific? | 🟡 |
+| R-K8 | Liability allocation: who is merchant-of-record when a connector executes, and does recording legal operator + jurisdiction actually discharge anything under the EU AI Act? Needs legal review, not research | 🟠 |
+
 ## D. Identity, privacy & governance
 
 | ID | Problem | Sev | Owner doc |

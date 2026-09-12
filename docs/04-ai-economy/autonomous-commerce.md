@@ -59,6 +59,48 @@ is real *but bounded*:
 prove the unprovable. zk-STARK is chosen because it is **transparent (no trusted setup) and
 PQ-safe** (hash-based, no pairings).
 
+## Settling against the outside world
+
+Everything above settles *on-chain*. Most real commerce does not: the counterparty is a merchant,
+a bank, or a carrier that has never heard of Huxplex. That path runs through **connectors**
+([ADR-0015](../adr/0015-connector-architecture.md),
+[protocol spec](../15-specifications/07-connector-protocol.md)), and it changes the settlement
+picture in four ways.
+
+**1. Authority is resolved before the outside world is touched.** The connector never receives
+the visa or any credential — only a single-purpose **Authorization Envelope** with
+`bounds ⊆ visa bounds`. An action exceeding it fails because no capability covering it was ever
+issued, not because a check rejected it. Even a colluding agent-plus-connector cannot exceed the
+visa (test G11-T6).
+
+**2. Escrow release gains a *provenance* dimension.** The release conditions above ask *"is the
+task verifiable?"*. External settlement also asks *"how strongly is the outcome evidenced?"* —
+[ADR-0016](../adr/0016-evidence-and-attestation.md)'s class lattice:
+
+| Evidence class | Escrow treatment |
+|---|---|
+| `SelfReported` | Never releases |
+| `Relayed` (third-party connector) | Release only if the intent accepted this class; otherwise dispute window |
+| `Notarized` (*k*-of-*n* connectors) | Shortened dispute window |
+| `FirstParty` (merchant signs its own record) | Direct release |
+| `Cryptographic` | Direct release, no trust in any connector |
+
+The **user sets the bar** per intent (`required_evidence_class`). This is deliberately the same
+posture as the zk-vs-escrow table above: cryptographic settlement where it is genuinely
+available, economic settlement everywhere else, and no claim to prove the unprovable.
+
+**3. Payment authority is separate from commerce authority.** Huxplex never holds the user's bank
+credentials. Commerce (`Commit`) and payment (`Settle`) are disjoint action classes routed to
+different connectors under different envelopes, correlated only by session.
+
+**4. There is no atomicity — only compensation.** Two independent external systems cannot be
+committed atomically. The commerce and payment legs form a saga: if one succeeds and the other
+fails, the session compensates (cancel or refund) under the visa's remediation policy. Where the
+external system supports a reversible hold, `Reserve` before `Commit` shrinks that window.
+
+> **`Unknown` is not `Failed`.** An external effect with an indeterminate outcome must reconcile,
+> never compensate on the assumption of failure — otherwise the user gets two cameras.
+
 ## Dispute resolution
 
 For non-verifiable work:
@@ -85,6 +127,9 @@ machine-economic concentration remains steerable by humans.
 | "Proof of correct work" overpromised | Strict scope (table above); economic path for the rest |
 | Escrow logic bugs (funds locked/stolen) | Audited resource logic; formal spec of release conditions; circuit breakers |
 | Oracle manipulation | Multiple independent oracles; bonded oracles; prefer zk where possible |
+| Connector lies about an external outcome | Evidence classes + user-set minimum; bonding; slashing on *provable* falsehood. Bounded, not eliminated ([ADR-0016](../adr/0016-evidence-and-attestation.md)) |
+| External leg succeeds, payment leg fails | Saga compensation under the visa's remediation policy; `Reserve` before `Commit` where supported |
+| Retry creates a duplicate external order | Effect Keys + mandatory connector idempotency; `Unknown ≠ Failed` |
 | Runaway machine economy | SVRGN veto, Agentic-DAO vote caps, constitutional limits on inflation/concentration |
 | MEV / intent front-running | Commit-reveal, escrow pre-lock (see [marketplace](agent-marketplace.md)) |
 

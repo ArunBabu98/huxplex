@@ -20,7 +20,7 @@ L1 in isolation; partnerships are leverage.
 ## Principles for partnerships
 
 1. **Neutrality first.** No partnership grants privileged protocol access, a backdoor, or
-   special governance weight. Partners use the same open rules as everyone (Principle #11).
+   special governance weight. Partners use the same open rules as everyone (Principle #12).
 2. **No custodial-bridge partnerships.** Cross-chain via proofs/light-clients only (T19).
 3. **Open by default.** Joint work is open-source/open-data where feasible.
 4. **Aligned, not extractive.** Avoid deals that trade long-term neutrality for short-term

@@ -1,7 +1,7 @@
 # Architecture Decision Records (ADRs)
 
 ADRs capture **significant, hard-to-reverse decisions** with their context and consequences, so
-future maintainers inherit the *reasoning*, not just the conclusion (Principle #15).
+future maintainers inherit the *reasoning*, not just the conclusion (Principle #16).
 
 ## Index
 
@@ -21,6 +21,8 @@ future maintainers inherit the *reasoning*, not just the conclusion (Principle #
 | [0012](0012-network-transport.md) | Network transport: rust-libp2p/QUIC + PQ-hybrid handshake | Accepted |
 | [0013](0013-did-huxplex-method.md) | `did:huxplex` self-certifying, chain-anchored DID method | Accepted |
 | [0014](0014-validator-key-management.md) | Validator key management & custody (hot/cold tiers) | Accepted |
+| [0015](0015-connector-architecture.md) | Connector architecture — wrap MCP, never widen authority | Accepted |
+| [0016](0016-evidence-and-attestation.md) | Evidence model — typed claims, classed trust, no truth by signature | Accepted |
 
 ## Process
 
