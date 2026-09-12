@@ -6,8 +6,29 @@
 # Fail on any security advisory in the dependency tree.
 version = 2
 yanked = "deny"
-# Add specific advisory IDs here to acknowledge/ignore with justification:
-ignore = []
+
+# Acknowledged advisories. Every entry MUST carry a justification, an owner, and a
+# review date. An entry here is a debt, not a decision — re-evaluate at each review.
+ignore = [
+    # RUSTSEC-2026-0173 — `proc-macro-error2` is unmaintained (the maintained fork of
+    # `proc-macro-error`, RUSTSEC-2024-0370, is itself now unmaintained).
+    #
+    # Why accepted:
+    #   * Not a vulnerability — an "unmaintained" advisory, with no known exploit.
+    #   * Build-time only. It is a proc-macro reached via
+    #     libcrux-{ml-dsa,ml-kem,sha3} -> libcrux-intrinsics -> core-models
+    #     -> hax-lib -> hax-lib-macros (proc-macro). Proc-macro code executes during
+    #     compilation and is NOT linked into the shipped artifact, so it is not part of
+    #     the runtime attack surface of a node.
+    #   * Not fixable here: cargo-deny reports "No safe upgrade is available!". The fix
+    #     must come from the hax project (libcrux's formal-verification tooling), which
+    #     we do not control and cannot drop without dropping libcrux.
+    #
+    # Exit condition: remove this entry as soon as a libcrux release depends on a
+    # hax-lib that has migrated off proc-macro-error2.
+    # Owner: crypto. Review by: 2026-12-31.
+    "RUSTSEC-2026-0173",
+]
 
 [licenses]
 version = 2
