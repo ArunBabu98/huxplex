@@ -6,8 +6,26 @@ pub mod publickey;
 pub mod signature;
 pub mod signaturescheme;
 
+// API contracts for primitives that are specified and test-covered but NOT yet implemented.
+// They are `#[cfg(test)]` so the conformance suites below type-check against a fixed
+// signature, while no `unimplemented!()` cryptography is reachable from the library's public
+// API. Their tests are `#[ignore]`d and carry a `// GATE: Gn` marker naming the gate that
+// un-ignores them (docs/16-action-plan.md, rule G0-T3).
+//
+//   slh_dsa  — GATE: G1   (FIPS 205, validator long-lived identity)
+//   lb_vrf   — GATE: G6+  (leader election; deferred out of v1)
+//   pq_ssle  — GATE: G6+  (single secret leader election; deferred out of v1)
+//   zk_stark — GATE: G10  (agent proof-of-task-completion; deferred out of v1)
 #[cfg(test)]
+pub mod lb_vrf;
+#[cfg(test)]
+pub mod pq_ssle;
+#[cfg(test)]
+pub mod slh_dsa;
+#[cfg(test)]
+pub mod zk_stark;
 
+#[cfg(test)]
 mod ml_dsa_44_tests {
     use crate::crypto::{
         bip32::derive_mldsa_seed, signature::Keypair, signaturescheme::SignatureSchemeId,
@@ -1085,7 +1103,7 @@ mod ml_kem_768_tests {
         let (_ek, dk) = kem768_keygen(KEYGEN_RAND_A);
         let (ek2, dk2) = kem768_keygen(KEYGEN_RAND_B);
 
-        let (ct_valid, ss_valid) = kem768_encapsulate(ek2, ENCAP_RAND_1);
+        let (ct_valid, _ss_valid) = kem768_encapsulate(ek2, ENCAP_RAND_1);
         let ss_valid_dec = kem768_decapsulate(dk2, ct_valid);
 
         // All-zero ciphertext against a real key
@@ -1684,10 +1702,12 @@ mod ml_kem_768_tests {
         assert_eq!(ss.len(), 32);
         assert_eq!(ct.len(), CT_SIZE);
         assert_eq!(ek.len(), EK_SIZE);
-        assert!(
-            EK_SIZE + CT_SIZE < 4096,
-            "Total handshake payload must fit inside a single QUIC datagram"
-        );
+        const {
+            assert!(
+                EK_SIZE + CT_SIZE < 4096,
+                "Total handshake payload must fit inside a single QUIC datagram"
+            )
+        };
     }
 }
 
@@ -1746,6 +1766,7 @@ mod slh_dsa_128s_tests {
     // ══════════════════════════════════════════════════════════════════════════
 
     #[test]
+    #[ignore = "GATE: G1 — not implemented; see docs/16-action-plan.md"]
     fn test_pk_size_matches_fips205_slh_dsa_128s() {
         // FIPS 205 Table 1 — SLH-DSA-128s: PKBytes = 2n = 2×16 = 32
         assert_eq!(
@@ -1757,6 +1778,7 @@ mod slh_dsa_128s_tests {
     }
 
     #[test]
+    #[ignore = "GATE: G1 — not implemented; see docs/16-action-plan.md"]
     fn test_sk_size_matches_fips205_slh_dsa_128s() {
         // FIPS 205 Table 1 — SLH-DSA-128s: SKBytes = 4n = 4×16 = 64
         assert_eq!(
@@ -1768,6 +1790,7 @@ mod slh_dsa_128s_tests {
     }
 
     #[test]
+    #[ignore = "GATE: G1 — not implemented; see docs/16-action-plan.md"]
     fn test_sig_size_matches_fips205_slh_dsa_128s() {
         // FIPS 205 Table 1 — SLH-DSA-128s (n=16, h=63, d=7, k=14, a=12, w=16):
         // SigBytes = n + k(a+1)n + d·len·n + h·n = 16 + 14·13·16 + 7·35·16 + 63·16
@@ -1782,6 +1805,7 @@ mod slh_dsa_128s_tests {
     }
 
     #[test]
+    #[ignore = "GATE: G1 — not implemented; see docs/16-action-plan.md"]
     fn test_sig_size_is_constant_regardless_of_message_size() {
         // SLH-DSA signature size is fixed — it does NOT grow with message size.
         // This is a key advantage over hash-then-sign schemes.
@@ -1823,6 +1847,7 @@ mod slh_dsa_128s_tests {
     // ══════════════════════════════════════════════════════════════════════════
 
     #[test]
+    #[ignore = "GATE: G1 — not implemented; see docs/16-action-plan.md"]
     fn test_sign_and_verify_roundtrip() {
         let (pk, sk) = make_keypair(SEED_A);
         let msg = b"validator-registration:did:huxplex:0xdeadbeef";
@@ -1836,6 +1861,7 @@ mod slh_dsa_128s_tests {
     }
 
     #[test]
+    #[ignore = "GATE: G1 — not implemented; see docs/16-action-plan.md"]
     fn test_sign_and_verify_without_context() {
         let (pk, sk) = make_keypair(SEED_A);
         let msg = b"test message";
@@ -1848,6 +1874,7 @@ mod slh_dsa_128s_tests {
     }
 
     #[test]
+    #[ignore = "GATE: G1 — not implemented; see docs/16-action-plan.md"]
     fn test_empty_message_sign_and_verify() {
         let (pk, sk) = make_keypair(SEED_A);
         let sig = slh_dsa_128s_sign(&sk, b"", None);
@@ -1862,6 +1889,7 @@ mod slh_dsa_128s_tests {
     // ══════════════════════════════════════════════════════════════════════════
 
     #[test]
+    #[ignore = "GATE: G1 — not implemented; see docs/16-action-plan.md"]
     fn test_tampered_message_fails_verification() {
         let (pk, sk) = make_keypair(SEED_A);
         let original = b"Register validator: did:huxplex:0xAABBCCDD";
@@ -1876,6 +1904,7 @@ mod slh_dsa_128s_tests {
     }
 
     #[test]
+    #[ignore = "GATE: G1 — not implemented; see docs/16-action-plan.md"]
     fn test_first_byte_flip_in_signature_fails_verification() {
         let (pk, sk) = make_keypair(SEED_A);
         let msg = b"validator-registration";
@@ -1889,6 +1918,7 @@ mod slh_dsa_128s_tests {
     }
 
     #[test]
+    #[ignore = "GATE: G1 — not implemented; see docs/16-action-plan.md"]
     fn test_last_byte_flip_in_signature_fails_verification() {
         let (pk, sk) = make_keypair(SEED_A);
         let msg = b"validator-registration";
@@ -1902,6 +1932,7 @@ mod slh_dsa_128s_tests {
     }
 
     #[test]
+    #[ignore = "GATE: G1 — not implemented; see docs/16-action-plan.md"]
     fn test_middle_byte_flip_in_signature_fails_verification() {
         let (pk, sk) = make_keypair(SEED_A);
         let msg = b"validator-registration";
@@ -1915,6 +1946,7 @@ mod slh_dsa_128s_tests {
     }
 
     #[test]
+    #[ignore = "GATE: G1 — not implemented; see docs/16-action-plan.md"]
     fn test_all_zero_signature_fails_verification() {
         let (pk, _sk) = make_keypair(SEED_A);
         let msg = b"validator-registration";
@@ -1927,6 +1959,7 @@ mod slh_dsa_128s_tests {
     }
 
     #[test]
+    #[ignore = "GATE: G1 — not implemented; see docs/16-action-plan.md"]
     fn test_wrong_public_key_fails_verification() {
         let (pk_a, sk_a) = make_keypair(SEED_A);
         let (pk_b, _sk_b) = make_keypair(SEED_B);
@@ -1949,6 +1982,7 @@ mod slh_dsa_128s_tests {
     // ══════════════════════════════════════════════════════════════════════════
 
     #[test]
+    #[ignore = "GATE: G1 — not implemented; see docs/16-action-plan.md"]
     fn test_wrong_context_fails_verification() {
         let (pk, sk) = make_keypair(SEED_A);
         let msg = b"validator-registration";
@@ -1972,6 +2006,7 @@ mod slh_dsa_128s_tests {
     }
 
     #[test]
+    #[ignore = "GATE: G1 — not implemented; see docs/16-action-plan.md"]
     fn test_no_context_sig_fails_when_context_required_at_verify() {
         let (pk, sk) = make_keypair(SEED_A);
         let msg = b"validator-registration";
@@ -1989,6 +2024,7 @@ mod slh_dsa_128s_tests {
     }
 
     #[test]
+    #[ignore = "GATE: G1 — not implemented; see docs/16-action-plan.md"]
     fn test_mainnet_and_testnet_registration_contexts_are_domain_separated() {
         let (pk, sk) = make_keypair(SEED_A);
         let msg = b"validator-registration";
@@ -2009,6 +2045,7 @@ mod slh_dsa_128s_tests {
     // ══════════════════════════════════════════════════════════════════════════
 
     #[test]
+    #[ignore = "GATE: G1 — not implemented; see docs/16-action-plan.md"]
     fn test_keygen_is_deterministic_same_seed_same_keys() {
         let (pk1, sk1) = make_keypair(SEED_A);
         let (pk2, sk2) = make_keypair(SEED_A);
@@ -2018,6 +2055,7 @@ mod slh_dsa_128s_tests {
     }
 
     #[test]
+    #[ignore = "GATE: G1 — not implemented; see docs/16-action-plan.md"]
     fn test_different_seeds_produce_different_keys() {
         let (pk_a, sk_a) = make_keypair(SEED_A);
         let (pk_b, sk_b) = make_keypair(SEED_B);
@@ -2031,6 +2069,7 @@ mod slh_dsa_128s_tests {
     }
 
     #[test]
+    #[ignore = "GATE: G1 — not implemented; see docs/16-action-plan.md"]
     fn test_keys_are_non_trivial() {
         let (pk, sk) = make_keypair(SEED_A);
         assert_ne!(pk, [0u8; SLH_DSA_PK_SIZE], "PK must not be all-zero");
@@ -2040,6 +2079,7 @@ mod slh_dsa_128s_tests {
     }
 
     #[test]
+    #[ignore = "GATE: G1 — not implemented; see docs/16-action-plan.md"]
     fn test_sig_is_non_trivial() {
         let (_pk, sk) = make_keypair(SEED_A);
         let sig = slh_dsa_128s_sign(&sk, b"test", None);
@@ -2054,6 +2094,7 @@ mod slh_dsa_128s_tests {
     // ══════════════════════════════════════════════════════════════════════════
 
     #[test]
+    #[ignore = "GATE: G1 — not implemented; see docs/16-action-plan.md"]
     fn test_slh_dsa_pk_size_distinct_from_ml_dsa_and_kem_key_sizes() {
         // SLH-DSA-128s PK (32 B) must not collide in size with:
         //   ML-DSA-44 PK (1312 B), ML-DSA-44 SK (2560 B),
@@ -2087,6 +2128,7 @@ mod slh_dsa_128s_tests {
     }
 
     #[test]
+    #[ignore = "GATE: G1 — not implemented; see docs/16-action-plan.md"]
     fn test_five_validator_registration_signatures_all_verify() {
         // Simulates 5 validators registering — each signs their DID with the
         // SLH-DSA-128s long-lived identity key using the registration context.
@@ -2113,6 +2155,7 @@ mod slh_dsa_128s_tests {
     }
 
     #[test]
+    #[ignore = "GATE: G1 — not implemented; see docs/16-action-plan.md"]
     fn test_zero_and_max_seed_no_panic_and_correctness() {
         for seed in [[0x00u8; 48], [0xFFu8; 48]] {
             let (pk, sk) = make_keypair(seed);
@@ -2128,6 +2171,7 @@ mod slh_dsa_128s_tests {
     }
 
     #[test]
+    #[ignore = "GATE: G1 — not implemented; see docs/16-action-plan.md"]
     fn test_overhead_vs_ml_dsa_44() {
         println!("=== SLH-DSA-128s vs ML-DSA-44 Signature Overhead ===");
         println!(
@@ -2190,22 +2234,26 @@ mod lb_vrf_tests {
     // ══════════════════════════════════════════════════════════════════════════
 
     #[test]
+    #[ignore = "GATE: G6+ — not implemented; see docs/16-action-plan.md"]
     fn test_output_size_is_84_bytes_per_spec() {
         assert_eq!(
             LB_VRF_OUTPUT_SIZE, 84,
             "LB-VRF output must be exactly 84 bytes per Huxplex spec"
         );
-        let (pk, sk) = lb_vrf_keygen(SEED_A);
+        let (_pk, sk) = lb_vrf_keygen(SEED_A);
         let (output, _proof) = lb_vrf_evaluate(&sk, b"epoch-seed");
         assert_eq!(output.len(), LB_VRF_OUTPUT_SIZE);
     }
 
     #[test]
+    #[ignore = "GATE: G6+ — not implemented; see docs/16-action-plan.md"]
     fn test_proof_size_is_within_5kb_spec_bound() {
-        assert!(
-            LB_VRF_PROOF_MAX <= 6144,
-            "LB-VRF proof constant must be ≤ 6 KB (spec: ~5 KB)"
-        );
+        const {
+            assert!(
+                LB_VRF_PROOF_MAX <= 6144,
+                "LB-VRF proof constant must be ≤ 6 KB (spec: ~5 KB)"
+            )
+        };
         let (_pk, sk) = lb_vrf_keygen(SEED_A);
         let (_output, proof) = lb_vrf_evaluate(&sk, b"epoch-seed");
         assert!(
@@ -2226,6 +2274,7 @@ mod lb_vrf_tests {
     // ══════════════════════════════════════════════════════════════════════════
 
     #[test]
+    #[ignore = "GATE: G6+ — not implemented; see docs/16-action-plan.md"]
     fn test_evaluate_and_verify_roundtrip() {
         let (pk, sk) = lb_vrf_keygen(SEED_A);
         let alpha = b"epoch:42:qrng-seed:0xdeadbeef";
@@ -2238,6 +2287,7 @@ mod lb_vrf_tests {
     }
 
     #[test]
+    #[ignore = "GATE: G6+ — not implemented; see docs/16-action-plan.md"]
     fn test_output_is_non_trivial() {
         let (_pk, sk) = lb_vrf_keygen(SEED_A);
         let (output, _) = lb_vrf_evaluate(&sk, b"epoch:42");
@@ -2259,6 +2309,7 @@ mod lb_vrf_tests {
     // ══════════════════════════════════════════════════════════════════════════
 
     #[test]
+    #[ignore = "GATE: G6+ — not implemented; see docs/16-action-plan.md"]
     fn test_evaluate_is_deterministic_same_sk_same_alpha() {
         let (_pk, sk) = lb_vrf_keygen(SEED_A);
         let alpha = b"epoch:42:qrng-seed";
@@ -2277,6 +2328,7 @@ mod lb_vrf_tests {
     }
 
     #[test]
+    #[ignore = "GATE: G6+ — not implemented; see docs/16-action-plan.md"]
     fn test_keygen_is_deterministic() {
         let (pk1, sk1) = lb_vrf_keygen(SEED_A);
         let (pk2, sk2) = lb_vrf_keygen(SEED_A);
@@ -2290,6 +2342,7 @@ mod lb_vrf_tests {
     // ══════════════════════════════════════════════════════════════════════════
 
     #[test]
+    #[ignore = "GATE: G6+ — not implemented; see docs/16-action-plan.md"]
     fn test_different_alpha_produces_different_output() {
         let (_pk, sk) = lb_vrf_keygen(SEED_A);
 
@@ -2303,6 +2356,7 @@ mod lb_vrf_tests {
     }
 
     #[test]
+    #[ignore = "GATE: G6+ — not implemented; see docs/16-action-plan.md"]
     fn test_different_keys_produce_different_outputs_for_same_alpha() {
         let (_pk_a, sk_a) = lb_vrf_keygen(SEED_A);
         let (_pk_b, sk_b) = lb_vrf_keygen(SEED_B);
@@ -2318,6 +2372,7 @@ mod lb_vrf_tests {
     }
 
     #[test]
+    #[ignore = "GATE: G6+ — not implemented; see docs/16-action-plan.md"]
     fn test_ten_validators_produce_distinct_outputs_for_same_epoch_seed() {
         // In Q-BFT, 10 validators each compute their VRF output over the same
         // epoch seed. All outputs must be distinct — each validator's slot is unique.
@@ -2348,6 +2403,7 @@ mod lb_vrf_tests {
     // ══════════════════════════════════════════════════════════════════════════
 
     #[test]
+    #[ignore = "GATE: G6+ — not implemented; see docs/16-action-plan.md"]
     fn test_tampered_output_fails_verification() {
         let (pk, sk) = lb_vrf_keygen(SEED_A);
         let alpha = b"epoch:42";
@@ -2361,6 +2417,7 @@ mod lb_vrf_tests {
     }
 
     #[test]
+    #[ignore = "GATE: G6+ — not implemented; see docs/16-action-plan.md"]
     fn test_tampered_proof_fails_verification() {
         let (pk, sk) = lb_vrf_keygen(SEED_A);
         let alpha = b"epoch:42";
@@ -2374,6 +2431,7 @@ mod lb_vrf_tests {
     }
 
     #[test]
+    #[ignore = "GATE: G6+ — not implemented; see docs/16-action-plan.md"]
     fn test_tampered_alpha_fails_verification() {
         let (pk, sk) = lb_vrf_keygen(SEED_A);
         let alpha_original = b"epoch:42";
@@ -2387,6 +2445,7 @@ mod lb_vrf_tests {
     }
 
     #[test]
+    #[ignore = "GATE: G6+ — not implemented; see docs/16-action-plan.md"]
     fn test_wrong_public_key_fails_verification() {
         let (pk_a, sk_a) = lb_vrf_keygen(SEED_A);
         let (pk_b, _sk_b) = lb_vrf_keygen(SEED_B);
@@ -2405,6 +2464,7 @@ mod lb_vrf_tests {
     }
 
     #[test]
+    #[ignore = "GATE: G6+ — not implemented; see docs/16-action-plan.md"]
     fn test_proof_from_different_alpha_fails_verification() {
         // A validator cannot reuse a proof generated for one epoch on a different epoch.
         let (pk, sk) = lb_vrf_keygen(SEED_A);
@@ -2431,6 +2491,7 @@ mod lb_vrf_tests {
     // ══════════════════════════════════════════════════════════════════════════
 
     #[test]
+    #[ignore = "GATE: G6+ — not implemented; see docs/16-action-plan.md"]
     fn test_vrf_output_usable_as_epoch_seed_non_repeating_across_epochs() {
         // The LB-VRF replaces ECDSA-VRFs for epoch randomness.
         // Each epoch's alpha is distinct, ensuring the QRNG seed is fresh.
@@ -2458,6 +2519,7 @@ mod lb_vrf_tests {
     }
 
     #[test]
+    #[ignore = "GATE: G6+ — not implemented; see docs/16-action-plan.md"]
     fn test_vrf_output_first_32_bytes_usable_as_shard_qrng_seed() {
         // shard_id = SHAKE-256(resource.nonce || epoch_qrng_seed)[0..2] mod NUM_SHARDS
         // The first 32 bytes of the 84-byte VRF output must be usable as a QRNG seed.
@@ -2474,6 +2536,7 @@ mod lb_vrf_tests {
     }
 
     #[test]
+    #[ignore = "GATE: G6+ — not implemented; see docs/16-action-plan.md"]
     fn test_overhead_documentation() {
         let (pk, sk) = lb_vrf_keygen(SEED_A);
         let (output, proof) = lb_vrf_evaluate(&sk, b"epoch:42");
@@ -2524,13 +2587,14 @@ mod lb_vrf_tests {
 #[cfg(test)]
 mod pq_ssle_tests {
     use crate::crypto::pq_ssle::{
-        ssle_commit, ssle_keygen, ssle_shuffle, ssle_try_reveal, ssle_verify_leader,
+        SslePublicKey, SsleSecretKey, ssle_commit, ssle_keygen, ssle_shuffle, ssle_try_reveal,
+        ssle_verify_leader,
     };
 
     const EPOCH_SEED_1: [u8; 32] = [0xAAu8; 32];
     const EPOCH_SEED_2: [u8; 32] = [0xBBu8; 32];
 
-    fn make_validator_set(n: usize) -> Vec<_> {
+    fn make_validator_set(n: usize) -> Vec<(SslePublicKey, SsleSecretKey)> {
         (0u8..n as u8)
             .map(|i| {
                 let mut seed = [0u8; 32];
@@ -2545,6 +2609,7 @@ mod pq_ssle_tests {
     // ══════════════════════════════════════════════════════════════════════════
 
     #[test]
+    #[ignore = "GATE: G6+ — not implemented; see docs/16-action-plan.md"]
     fn test_commit_is_deterministic_same_sk_same_epoch_seed() {
         let (_pk, sk) = ssle_keygen([0x01u8; 32]);
 
@@ -2558,6 +2623,7 @@ mod pq_ssle_tests {
     }
 
     #[test]
+    #[ignore = "GATE: G6+ — not implemented; see docs/16-action-plan.md"]
     fn test_commit_differs_for_different_epoch_seeds() {
         let (_pk, sk) = ssle_keygen([0x01u8; 32]);
 
@@ -2571,6 +2637,7 @@ mod pq_ssle_tests {
     }
 
     #[test]
+    #[ignore = "GATE: G6+ — not implemented; see docs/16-action-plan.md"]
     fn test_different_validators_produce_different_commitments() {
         let validators = make_validator_set(5);
         let commitments: Vec<_> = validators
@@ -2593,6 +2660,7 @@ mod pq_ssle_tests {
     // ══════════════════════════════════════════════════════════════════════════
 
     #[test]
+    #[ignore = "GATE: G6+ — not implemented; see docs/16-action-plan.md"]
     fn test_shuffle_is_deterministic_same_inputs() {
         let validators = make_validator_set(5);
         let commitments: Vec<_> = validators
@@ -2610,6 +2678,7 @@ mod pq_ssle_tests {
     }
 
     #[test]
+    #[ignore = "GATE: G6+ — not implemented; see docs/16-action-plan.md"]
     fn test_shuffle_preserves_count() {
         let n = 7;
         let validators = make_validator_set(n);
@@ -2627,6 +2696,7 @@ mod pq_ssle_tests {
     }
 
     #[test]
+    #[ignore = "GATE: G6+ — not implemented; see docs/16-action-plan.md"]
     fn test_different_epoch_seeds_produce_different_shuffled_orders() {
         let validators = make_validator_set(5);
         let commitments: Vec<_> = validators
@@ -2645,6 +2715,7 @@ mod pq_ssle_tests {
     }
 
     #[test]
+    #[ignore = "GATE: G6+ — not implemented; see docs/16-action-plan.md"]
     fn test_shuffle_with_single_validator_is_identity() {
         let (_pk, sk) = ssle_keygen([0x01u8; 32]);
         let commitment = ssle_commit(&sk, EPOCH_SEED_1);
@@ -2662,6 +2733,7 @@ mod pq_ssle_tests {
     // ══════════════════════════════════════════════════════════════════════════
 
     #[test]
+    #[ignore = "GATE: G6+ — not implemented; see docs/16-action-plan.md"]
     fn test_owning_validator_can_reveal_their_commitment() {
         // A validator who owns a commitment must be able to produce a valid reveal.
         let (pk, sk) = ssle_keygen([0x01u8; 32]);
@@ -2680,6 +2752,7 @@ mod pq_ssle_tests {
     }
 
     #[test]
+    #[ignore = "GATE: G6+ — not implemented; see docs/16-action-plan.md"]
     fn test_non_owning_validator_cannot_reveal_another_commitment() {
         // A Byzantine validator must not be able to claim a slot they don't own.
         let (_pk_1, sk_1) = ssle_keygen([0x01u8; 32]);
@@ -2697,6 +2770,7 @@ mod pq_ssle_tests {
     }
 
     #[test]
+    #[ignore = "GATE: G6+ — not implemented; see docs/16-action-plan.md"]
     fn test_verify_leader_fails_for_wrong_public_key() {
         let (pk_1, sk_1) = ssle_keygen([0x01u8; 32]);
         let (pk_2, _sk_2) = ssle_keygen([0x02u8; 32]);
@@ -2720,6 +2794,7 @@ mod pq_ssle_tests {
     // ══════════════════════════════════════════════════════════════════════════
 
     #[test]
+    #[ignore = "GATE: G6+ — not implemented; see docs/16-action-plan.md"]
     fn test_shuffled_commitments_do_not_reveal_validator_identity_before_reveal() {
         // The LWE re-randomization must ensure shuffled C' != original C.
         // An observer cannot map shuffled commitments back to validators without reveal.
@@ -2747,6 +2822,7 @@ mod pq_ssle_tests {
     }
 
     #[test]
+    #[ignore = "GATE: G6+ — not implemented; see docs/16-action-plan.md"]
     fn test_four_validators_exactly_one_reveals_successfully_after_shuffle() {
         // In a Q-BFT election with 4 validators, exactly one shuffled slot
         // belongs to each validator. Each validator tries all shuffled slots —
@@ -2788,6 +2864,7 @@ mod pq_ssle_tests {
     }
 
     #[test]
+    #[ignore = "GATE: G6+ — not implemented; see docs/16-action-plan.md"]
     fn test_seven_validators_full_q_bft_election_simulation() {
         // n=7, f≤2 (Q-BFT tolerates ⌊(7-1)/3⌋ = 2 Byzantine faults)
         // Simulates a complete epoch leader election.
@@ -2830,6 +2907,7 @@ mod pq_ssle_tests {
     // ══════════════════════════════════════════════════════════════════════════
 
     #[test]
+    #[ignore = "GATE: G6+ — not implemented; see docs/16-action-plan.md"]
     fn test_different_epoch_seeds_elect_potentially_different_leaders() {
         // Two different epoch seeds should, in general, elect different leaders.
         // This is a probabilistic property — we test that the protocol is epoch-sensitive.
@@ -2858,6 +2936,7 @@ mod pq_ssle_tests {
     }
 
     #[test]
+    #[ignore = "GATE: G6+ — not implemented; see docs/16-action-plan.md"]
     fn test_validator_commitment_for_different_epochs_differs() {
         // A validator's commitment changes each epoch — prevents commitment replay.
         let (_pk, sk) = ssle_keygen([0x01u8; 32]);
@@ -2871,6 +2950,7 @@ mod pq_ssle_tests {
     }
 
     #[test]
+    #[ignore = "GATE: G6+ — not implemented; see docs/16-action-plan.md"]
     fn test_empty_validator_set_shuffle_is_empty() {
         let shuffled = ssle_shuffle(&[], EPOCH_SEED_1);
         assert!(
@@ -2950,6 +3030,7 @@ mod zk_stark_tests {
     // ══════════════════════════════════════════════════════════════════════════
 
     #[test]
+    #[ignore = "GATE: G10 — not implemented; see docs/16-action-plan.md"]
     fn test_proof_size_constants_match_spec() {
         // Spec: "Proof size: ~100–200 KB (zk-STARK, no trusted setup)"
         assert_eq!(
@@ -2960,13 +3041,16 @@ mod zk_stark_tests {
             STARK_MAX_PROOF_BYTES, 200_000,
             "STARK_MAX_PROOF_BYTES must be 200 KB per spec"
         );
-        assert!(
-            STARK_MIN_PROOF_BYTES < STARK_MAX_PROOF_BYTES,
-            "Min proof bound must be less than max"
-        );
+        const {
+            assert!(
+                STARK_MIN_PROOF_BYTES < STARK_MAX_PROOF_BYTES,
+                "Min proof bound must be less than max"
+            )
+        };
     }
 
     #[test]
+    #[ignore = "GATE: G10 — not implemented; see docs/16-action-plan.md"]
     fn test_generated_proof_size_is_within_spec_bounds() {
         let pub_input = stark_public_input(TASK_HASH_A, OUTPUT_HASH_A, AGENT_DID_A, VC_ID_A);
         let proof = stark_prove(&valid_witness_a(), &pub_input).expect("Valid witness must prove");
@@ -2997,6 +3081,7 @@ mod zk_stark_tests {
     // ══════════════════════════════════════════════════════════════════════════
 
     #[test]
+    #[ignore = "GATE: G10 — not implemented; see docs/16-action-plan.md"]
     fn test_completeness_valid_witness_produces_valid_proof() {
         let pub_input = stark_public_input(TASK_HASH_A, OUTPUT_HASH_A, AGENT_DID_A, VC_ID_A);
         let proof = stark_prove(&valid_witness_a(), &pub_input)
@@ -3009,8 +3094,11 @@ mod zk_stark_tests {
     }
 
     #[test]
+    #[ignore = "GATE: G10 — not implemented; see docs/16-action-plan.md"]
     fn test_completeness_multiple_different_tasks_each_verify() {
-        let tasks: &[([u8; 32], [u8; 32], &[u8], &[u8])] = &[
+        // (task_hash, output_hash, agent_did, vc_id)
+        type TaskCase<'a> = ([u8; 32], [u8; 32], &'a [u8], &'a [u8]);
+        let tasks: &[TaskCase] = &[
             (TASK_HASH_A, OUTPUT_HASH_A, AGENT_DID_A, VC_ID_A),
             (TASK_HASH_B, OUTPUT_HASH_B, AGENT_DID_B, VC_ID_B),
         ];
@@ -3035,6 +3123,7 @@ mod zk_stark_tests {
     // ══════════════════════════════════════════════════════════════════════════
 
     #[test]
+    #[ignore = "GATE: G10 — not implemented; see docs/16-action-plan.md"]
     fn test_soundness_tampered_public_input_task_hash_fails() {
         let pub_input = stark_public_input(TASK_HASH_A, OUTPUT_HASH_A, AGENT_DID_A, VC_ID_A);
         let proof = stark_prove(&valid_witness_a(), &pub_input).unwrap();
@@ -3048,6 +3137,7 @@ mod zk_stark_tests {
     }
 
     #[test]
+    #[ignore = "GATE: G10 — not implemented; see docs/16-action-plan.md"]
     fn test_soundness_tampered_output_hash_fails() {
         let pub_input = stark_public_input(TASK_HASH_A, OUTPUT_HASH_A, AGENT_DID_A, VC_ID_A);
         let proof = stark_prove(&valid_witness_a(), &pub_input).unwrap();
@@ -3060,6 +3150,7 @@ mod zk_stark_tests {
     }
 
     #[test]
+    #[ignore = "GATE: G10 — not implemented; see docs/16-action-plan.md"]
     fn test_soundness_tampered_agent_did_fails() {
         let pub_input = stark_public_input(TASK_HASH_A, OUTPUT_HASH_A, AGENT_DID_A, VC_ID_A);
         let proof = stark_prove(&valid_witness_a(), &pub_input).unwrap();
@@ -3072,6 +3163,7 @@ mod zk_stark_tests {
     }
 
     #[test]
+    #[ignore = "GATE: G10 — not implemented; see docs/16-action-plan.md"]
     fn test_soundness_tampered_vc_id_fails() {
         let pub_input = stark_public_input(TASK_HASH_A, OUTPUT_HASH_A, AGENT_DID_A, VC_ID_A);
         let proof = stark_prove(&valid_witness_a(), &pub_input).unwrap();
@@ -3084,6 +3176,7 @@ mod zk_stark_tests {
     }
 
     #[test]
+    #[ignore = "GATE: G10 — not implemented; see docs/16-action-plan.md"]
     fn test_soundness_first_byte_flip_in_proof_fails() {
         let pub_input = stark_public_input(TASK_HASH_A, OUTPUT_HASH_A, AGENT_DID_A, VC_ID_A);
         let mut proof = stark_prove(&valid_witness_a(), &pub_input).unwrap();
@@ -3096,6 +3189,7 @@ mod zk_stark_tests {
     }
 
     #[test]
+    #[ignore = "GATE: G10 — not implemented; see docs/16-action-plan.md"]
     fn test_soundness_last_byte_flip_in_proof_fails() {
         let pub_input = stark_public_input(TASK_HASH_A, OUTPUT_HASH_A, AGENT_DID_A, VC_ID_A);
         let mut proof = stark_prove(&valid_witness_a(), &pub_input).unwrap();
@@ -3109,6 +3203,7 @@ mod zk_stark_tests {
     }
 
     #[test]
+    #[ignore = "GATE: G10 — not implemented; see docs/16-action-plan.md"]
     fn test_soundness_proof_a_does_not_verify_for_task_b() {
         // An agent must not reuse a proof from a previous task to claim completion of a new one.
         let pub_a = stark_public_input(TASK_HASH_A, OUTPUT_HASH_A, AGENT_DID_A, VC_ID_A);
@@ -3131,6 +3226,7 @@ mod zk_stark_tests {
     }
 
     #[test]
+    #[ignore = "GATE: G10 — not implemented; see docs/16-action-plan.md"]
     fn test_soundness_empty_witness_returns_error_or_invalid_proof() {
         // An empty execution trace cannot constitute a valid proof.
         let pub_input = stark_public_input(TASK_HASH_A, OUTPUT_HASH_A, AGENT_DID_A, VC_ID_A);
@@ -3157,6 +3253,7 @@ mod zk_stark_tests {
     // ══════════════════════════════════════════════════════════════════════════
 
     #[test]
+    #[ignore = "GATE: G10 — not implemented; see docs/16-action-plan.md"]
     fn test_two_independent_proofs_of_same_task_both_verify() {
         // STARKs use public randomness (Fiat-Shamir). Two independently generated
         // proofs for the same (witness, public_input) should BOTH verify.
@@ -3180,6 +3277,7 @@ mod zk_stark_tests {
     }
 
     #[test]
+    #[ignore = "GATE: G10 — not implemented; see docs/16-action-plan.md"]
     fn test_different_agents_same_task_hash_produce_different_proofs() {
         // Two different agents completing the same task (same task_hash) must produce
         // distinct proofs bound to their respective DIDs.
@@ -3217,6 +3315,7 @@ mod zk_stark_tests {
     // ══════════════════════════════════════════════════════════════════════════
 
     #[test]
+    #[ignore = "GATE: G10 — not implemented; see docs/16-action-plan.md"]
     fn test_two_proofs_of_same_statement_have_different_bytes() {
         // Fiat-Shamir randomness ensures two independently generated proofs
         // for the same (witness, public_input) are bit-distinct — an observer
@@ -3237,6 +3336,7 @@ mod zk_stark_tests {
     }
 
     #[test]
+    #[ignore = "GATE: G10 — not implemented; see docs/16-action-plan.md"]
     fn test_proof_does_not_leak_witness_bytes() {
         // The proof must not contain the raw witness as a substring.
         // A zk-STARK must not embed the private execution trace in the proof.
@@ -3265,6 +3365,7 @@ mod zk_stark_tests {
     }
 
     #[test]
+    #[ignore = "GATE: G10 — not implemented; see docs/16-action-plan.md"]
     fn test_different_witnesses_for_same_output_produce_different_proofs() {
         // Two agents arrive at the same output_hash via different execution paths.
         // Their proofs must differ — each proof commits to its own trace.
@@ -3308,6 +3409,7 @@ mod zk_stark_tests {
     // ══════════════════════════════════════════════════════════════════════════
 
     #[test]
+    #[ignore = "GATE: G10 — not implemented; see docs/16-action-plan.md"]
     fn test_work_visa_escrow_happy_path_agent_gets_paid() {
         // Agent A completes task, submits valid proof → escrow releases payment.
         let pub_input = stark_public_input(TASK_HASH_A, OUTPUT_HASH_A, AGENT_DID_A, VC_ID_A);
@@ -3325,6 +3427,7 @@ mod zk_stark_tests {
     }
 
     #[test]
+    #[ignore = "GATE: G10 — not implemented; see docs/16-action-plan.md"]
     fn test_work_visa_escrow_invalid_proof_payment_withheld() {
         // Agent submits a tampered proof → escrow refuses to release payment.
         let pub_input = stark_public_input(TASK_HASH_A, OUTPUT_HASH_A, AGENT_DID_A, VC_ID_A);
@@ -3343,6 +3446,7 @@ mod zk_stark_tests {
     }
 
     #[test]
+    #[ignore = "GATE: G10 — not implemented; see docs/16-action-plan.md"]
     fn test_work_visa_agent_cannot_claim_another_agents_task_reward() {
         // Agent B tries to submit Agent A's valid proof to claim Agent A's reward.
         // The public input includes agent_did, so the proof is DID-bound.
@@ -3363,6 +3467,7 @@ mod zk_stark_tests {
     }
 
     #[test]
+    #[ignore = "GATE: G10 — not implemented; see docs/16-action-plan.md"]
     fn test_work_visa_replayed_proof_from_previous_task_rejected() {
         // An agent tries to replay a proof from task A to claim payment for task B.
         // This tests that the vc_id and task_hash are both bound into the proof.
@@ -3382,6 +3487,7 @@ mod zk_stark_tests {
     }
 
     #[test]
+    #[ignore = "GATE: G10 — not implemented; see docs/16-action-plan.md"]
     fn test_five_agents_five_tasks_all_complete_and_verify_independently() {
         // Simulates 5 concurrent AI agents each completing their own task.
         // This is the core L6 work-visa escrow scenario at small scale.
@@ -3424,6 +3530,7 @@ mod zk_stark_tests {
     // ══════════════════════════════════════════════════════════════════════════
 
     #[test]
+    #[ignore = "GATE: G10 — not implemented; see docs/16-action-plan.md"]
     fn test_all_zero_public_inputs_no_panic_and_correctness() {
         // Degenerate inputs must not cause panic — must satisfy completeness.
         let pub_input =
@@ -3450,6 +3557,7 @@ mod zk_stark_tests {
     }
 
     #[test]
+    #[ignore = "GATE: G10 — not implemented; see docs/16-action-plan.md"]
     fn test_max_byte_public_inputs_no_panic_and_correctness() {
         let pub_input =
             stark_public_input([0xFFu8; 32], [0xFFu8; 32], b"did:huxplex:max", b"vc:max");
@@ -3471,6 +3579,7 @@ mod zk_stark_tests {
     }
 
     #[test]
+    #[ignore = "GATE: G10 — not implemented; see docs/16-action-plan.md"]
     fn test_large_witness_no_panic_and_valid_proof_size() {
         // A large execution trace (e.g. a complex ML inference task) must still
         // produce a proof within the 100–200 KB spec bound.
@@ -3514,6 +3623,7 @@ mod zk_stark_tests {
     // ══════════════════════════════════════════════════════════════════════════
 
     #[test]
+    #[ignore = "GATE: G10 — not implemented; see docs/16-action-plan.md"]
     fn test_stark_proof_size_distinct_from_all_other_l1_crypto_types() {
         use crate::crypto::{
             kem::CT_SIZE,
@@ -3565,6 +3675,7 @@ mod zk_stark_tests {
     // ══════════════════════════════════════════════════════════════════════════
 
     #[test]
+    #[ignore = "GATE: G10 — not implemented; see docs/16-action-plan.md"]
     fn test_overhead_documentation_vs_groth16_snark() {
         // zk-STARK vs Groth16 SNARK (reference: Ethereum zkEVM provers)
         //   Groth16 proof:   192 bytes  (trusted setup required)

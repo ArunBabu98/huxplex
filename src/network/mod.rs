@@ -10,7 +10,6 @@ mod network_tests {
             kem::{EK_SIZE, kem768_keygen},
             signature::Keypair,
             signaturescheme::SignatureSchemeId,
-            *,
         },
         network::{
             message::{DhtEntry, GossipMessage},
