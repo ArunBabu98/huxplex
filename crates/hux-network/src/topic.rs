@@ -28,3 +28,12 @@ impl GossipTopic {
 pub fn gossip_context(network: &str, topic: &GossipTopic) -> Vec<u8> {
     format!("huxplex-{network}:gossip:{}:v1", topic.as_str()).into_bytes()
 }
+
+/// Derives the ML-DSA-44 context string for an authenticated Kademlia DHT entry.
+/// Format: b"huxplex-{network}:dht:entry:v1"
+///
+/// Network-generalized per the cryptography spec §5 rule 2 — a `mainnet` DHT record must not
+/// verify under `testnet` and vice versa.
+pub fn dht_entry_context(network: &str) -> Vec<u8> {
+    format!("huxplex-{network}:dht:entry:v1").into_bytes()
+}

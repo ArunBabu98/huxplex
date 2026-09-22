@@ -1,11 +1,10 @@
-use crate::{
-    crypto::{
-        error::CryptoResult,
-        publickey::PublicKey,
-        signature::{Keypair, Signature},
-    },
-    network::topic::{GossipTopic, gossip_context},
+use hux_crypto::{
+    error::CryptoResult,
+    publickey::PublicKey,
+    signature::{Keypair, Signature},
 };
+
+use crate::topic::{GossipTopic, dht_entry_context, gossip_context};
 
 #[derive(Clone, Debug)]
 pub struct GossipMessage {
@@ -45,30 +44,40 @@ impl GossipMessage {
 pub struct DhtEntry {
     pub key: Vec<u8>,
     pub value: Vec<u8>,
+    pub network: String, // "mainnet" | "testnet"
     pub sig: Signature,
     pub signer_pk: PublicKey,
 }
 
 impl DhtEntry {
-    pub fn sign(keypair: &Keypair, key: Vec<u8>, value: Vec<u8>) -> CryptoResult<Self> {
-        let mut payload = Vec::with_capacity(key.len() + value.len());
-        payload.extend_from_slice(&key);
-        payload.extend_from_slice(&value);
-        let ctx = b"huxplex-mainnet:dht:entry:v1";
-        let sig = keypair.sign(&payload, Some(ctx))?;
+    pub fn sign(
+        keypair: &Keypair,
+        key: Vec<u8>,
+        value: Vec<u8>,
+        network: &str,
+    ) -> CryptoResult<Self> {
+        let payload = Self::payload(&key, &value);
+        let ctx = dht_entry_context(network);
+        let sig = keypair.sign(&payload, Some(&ctx))?;
         Ok(DhtEntry {
             key,
             value,
+            network: network.to_string(),
             sig,
             signer_pk: keypair.public_key().clone(),
         })
     }
 
     pub fn verify(&self) -> CryptoResult<bool> {
-        let mut payload = Vec::with_capacity(self.key.len() + self.value.len());
-        payload.extend_from_slice(&self.key);
-        payload.extend_from_slice(&self.value);
-        let ctx = b"huxplex-mainnet:dht:entry:v1";
-        self.signer_pk.verify(&payload, &self.sig, Some(ctx))
+        let payload = Self::payload(&self.key, &self.value);
+        let ctx = dht_entry_context(&self.network);
+        self.signer_pk.verify(&payload, &self.sig, Some(&ctx))
+    }
+
+    fn payload(key: &[u8], value: &[u8]) -> Vec<u8> {
+        let mut payload = Vec::with_capacity(key.len() + value.len());
+        payload.extend_from_slice(key);
+        payload.extend_from_slice(value);
+        payload
     }
 }

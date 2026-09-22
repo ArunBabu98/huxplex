@@ -1,0 +1,35 @@
+[package]
+name = "hux-crypto"
+description = "Huxplex Layer 0 — post-quantum cryptographic primitives, domain separation, and HD key derivation."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+libcrux-ml-dsa.workspace = true
+libcrux-ml-kem.workspace = true
+hkdf.workspace = true
+sha2.workspace = true
+sha3.workspace = true
+thiserror.workspace = true
+hex.workspace = true
+bip32.workspace = true
+rand.workspace = true
+zeroize.workspace = true
+subtle.workspace = true
+
+# SIMD backends are selected per target architecture. The crypto code always calls libcrux's
+# top-level (multiplexing) entry points, which pick a backend at runtime and fall back to the
+# portable implementation; these features only make the faster backend available to that
+# dispatcher. Never call a backend path such as `mlkem768::avx2::*` directly — it does not
+# exist on aarch64. All backends are output-identical.
+[target.'cfg(target_arch = "x86_64")'.dependencies]
+libcrux-ml-kem = { workspace = true, features = ["simd256"] }
+
+[target.'cfg(target_arch = "aarch64")'.dependencies]
+libcrux-ml-kem = { workspace = true, features = ["simd128"] }

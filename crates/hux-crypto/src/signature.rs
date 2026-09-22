@@ -1,7 +1,7 @@
 use libcrux_ml_dsa::ml_dsa_44;
 use rand::Rng;
 
-use crate::crypto::{
+use crate::{
     error::{CryptoError, CryptoResult},
     privatekey::PrivateKey,
     publickey::PublicKey,
@@ -29,10 +29,7 @@ impl Keypair {
                         scheme: scheme.clone(),
                         bytes: keypair.verification_key.as_ref().to_vec(),
                     },
-                    privatekey: PrivateKey {
-                        scheme,
-                        bytes: keypair.signing_key.as_ref().to_vec(),
-                    },
+                    privatekey: PrivateKey::new(scheme, keypair.signing_key.as_ref().to_vec()),
                 })
             }
         }
@@ -49,8 +46,7 @@ impl Keypair {
     pub fn sign(&self, message: &[u8], context: Option<&[u8]>) -> CryptoResult<Signature> {
         let sk_bytes: [u8; 2560] = self
             .private_key()
-            .bytes
-            .as_slice()
+            .expose_secret()
             .try_into()
             .map_err(|e| CryptoError::InvalidSecretKeySize(format!("{:?}", e)))?;
 

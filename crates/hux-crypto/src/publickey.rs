@@ -1,7 +1,7 @@
 // src/crypto/publickey.rs
 use libcrux_ml_dsa::ml_dsa_44;
 
-use crate::crypto::{
+use crate::{
     error::{CryptoError, CryptoResult},
     signature::Signature,
     signaturescheme::SignatureSchemeId,

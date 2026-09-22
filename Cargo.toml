@@ -1,11 +1,29 @@
-[package]
-name = "huxplex"
+[workspace]
+resolver = "3"
+members = ["crates/hux-crypto", "crates/hux-network"]
+
+# Crates depend downward only — see docs/10-development/repository-structure.md.
+# Current layering: hux-network → hux-crypto. A cycle is a build failure.
+
+[workspace.package]
 version = "0.1.0"
 edition = "2024"
+license = "Apache-2.0"
+repository = "https://github.com/ArunBabu98/huxplex"
+rust-version = "1.85"
 
-[dependencies]
+[workspace.lints.rust]
+# Principle #8 (docs/01-vision/principles.md): memory safety is a security property.
+# Unsafe is tolerated only inside vetted upstream cryptographic primitives, never here.
+unsafe_code = "forbid"
+
+[workspace.dependencies]
+# Post-quantum primitives. libcrux is formally verified (hax + F*) for panic freedom,
+# correctness and secret independence over its field arithmetic, NTT and serialization —
+# see docs/10-development/repository-structure.md § Dependency policy.
 libcrux-ml-dsa = "0.0.10"
 libcrux-ml-kem = "0.0.10"
+
 hkdf = "0.12.4"
 sha2 = "0.10.9"
 sha3 = "0.10.8"
@@ -14,13 +32,12 @@ hex = "0.4.3"
 bip32 = "0.5.3"
 rand = "0.10.0"
 
-# SIMD backends are selected per target architecture. The crypto code always calls libcrux's
-# top-level (multiplexing) entry points, which pick a backend at runtime and fall back to the
-# portable implementation; these features only make the faster backend available to that
-# dispatcher. Never call a backend path such as `mlkem768::avx2::*` directly — it does not
-# exist on aarch64. All backends are output-identical.
-[target.'cfg(target_arch = "x86_64")'.dependencies]
-libcrux-ml-kem = { version = "0.0.10", features = ["simd256"] }
+# Secret hygiene (docs/18-implementation-plan/01-g0-repository-health.md, G0 item 7).
+#   zeroize — wipe key material on drop so it does not linger in freed memory.
+#   subtle  — constant-time equality; a byte-wise `==` on secrets short-circuits and is a
+#             timing oracle.
+zeroize = { version = "1.8", features = ["derive"] }
+subtle = "2.6"
 
-[target.'cfg(target_arch = "aarch64")'.dependencies]
-libcrux-ml-kem = { version = "0.0.10", features = ["simd128"] }
+# Internal
+hux-crypto = { path = "crates/hux-crypto" }

@@ -17,5 +17,5 @@ pub enum NetworkError {
     DhtAuthFailed(String),
 
     #[error("Crypto error: {0}")]
-    CryptoError(#[from] crate::crypto::error::CryptoError),
+    CryptoError(#[from] hux_crypto::error::CryptoError),
 }

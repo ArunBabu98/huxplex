@@ -1,6 +1,6 @@
 use thiserror::Error;
 
-use crate::crypto::signaturescheme::SignatureSchemeId;
+use crate::signaturescheme::SignatureSchemeId;
 
 #[derive(Error, Debug)]
 pub enum CryptoError {

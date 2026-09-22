@@ -1,7 +1,7 @@
 use sha2::digest::{ExtendableOutput, Update, XofReader};
 use sha3::Shake256;
 
-use crate::crypto::publickey::PublicKey;
+use hux_crypto::publickey::PublicKey;
 
 #[derive(Debug, PartialEq)]
 pub struct PeerId {
