@@ -58,7 +58,7 @@ called this correctly and early. Since then:
   **2026-09-05**.
 - IETF `draft-ietf-tls-ecdhe-mlkem` is at -05.
 
-The existing `kem768_derive_session_key` directional derivation in `src/crypto/kem.rs`
+The existing `kem768_derive_session_key` directional derivation in `crates/hux-crypto/src/kem.rs`
 anticipates the design that the ecosystem then settled on. Keep it.
 
 ### 1.2 Family diversity (lattice + hash-based) — the year's best-vindicated call

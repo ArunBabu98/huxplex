@@ -1,4 +1,4 @@
-// src/crypto/publickey.rs
+// crates/hux-crypto/src/publickey.rs
 use libcrux_ml_dsa::ml_dsa_44;
 
 use crate::{

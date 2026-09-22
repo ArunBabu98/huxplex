@@ -101,7 +101,7 @@ sequenceDiagram
 ```
 
 The phase context strings above (`preprepare`/`prepare`/`commit`) are **already implemented
-and tested** in `src/crypto/mod.rs` — phase replay is provably prevented. This is real,
+and tested** in `crates/hux-crypto/` — phase replay is provably prevented. This is real,
 shippable foundation.
 
 ## Anti-grinding: causal clocks

@@ -49,7 +49,7 @@ the project's internal coherence.
 | Constraints enforced by the machine, not by convention | Same; "enforced in HuxVM … not merely advisory" |
 | The four identity questions (who is the human / the agent / who authorized / what may it do) | [`05-identity/`](../05-identity/), [`adr/0013-did-huxplex-method.md`](../adr/0013-did-huxplex-method.md) |
 | Q-BFT at L1 for finality | [`15-specifications/04-consensus-spec.md`](../15-specifications/04-consensus-spec.md) |
-| PQ crypto and secure propagation at L0 | [`02-architecture/cryptography.md`](../02-architecture/cryptography.md) — and 🟢 implemented in `src/crypto/` |
+| PQ crypto and secure propagation at L0 | [`02-architecture/cryptography.md`](../02-architecture/cryptography.md) — and 🟢 implemented in `crates/hux-crypto/` |
 | Agent lifecycle with revocation and expiry | [`04-ai-economy/ai-agent-framework.md`](../04-ai-economy/ai-agent-framework.md) lifecycle state machine |
 | "Capability with responsibility"; human sovereignty as invariant | [`01-vision/mission.md`](../01-vision/mission.md), [`07-governance/constitutional-layer.md`](../07-governance/constitutional-layer.md) |
 

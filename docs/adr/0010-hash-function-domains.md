@@ -11,7 +11,7 @@
 
 - The repository `readme.md` lists **BLAKE3** as the hashing primitive.
 - The **code** uses **SHAKE-256** (`sha3::Shake256`) to derive `PeerId` from an ML-DSA-44 public
-  key (`src/network/peer.rs`), and the executive summary records `PeerId = SHAKE-256(pk)[..32]`
+  key (`crates/hux-network/src/peer.rs`), and the executive summary records `PeerId = SHAKE-256(pk)[..32]`
   as 🟢 ground truth.
 
 This is the same class of readme-vs-reality conflict that [ADR-0001](0001-canonical-architecture-reconciliation.md)
@@ -78,4 +78,4 @@ Rules:
   [ADR-0003 HRM state model](0003-state-model-hrm.md)
 - [cryptography architecture](../02-architecture/cryptography.md),
   [crypto spec](../15-specifications/02-cryptography-spec.md)
-- Code: `src/network/peer.rs` (SHAKE-256 PeerId), `src/crypto/kem.rs` (HKDF-SHA-256)
+- Code: `crates/hux-network/src/peer.rs` (SHAKE-256 PeerId), `crates/hux-crypto/src/kem.rs` (HKDF-SHA-256)

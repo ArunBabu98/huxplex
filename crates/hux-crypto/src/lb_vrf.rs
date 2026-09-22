@@ -83,7 +83,7 @@ pub fn lb_vrf_verify(
 //  Security: Module-SIS + Module-LWE
 //  Use case: Q-BFT epoch seed generation, leader election randomness
 //
-//  Expected API (src/crypto/lb_vrf.rs):
+//  Expected API (crates/hux-crypto/src/lb_vrf.rs):
 //    pub const LB_VRF_OUTPUT_SIZE: usize = 84;
 //    pub const LB_VRF_PROOF_MAX:   usize = 5120;
 //

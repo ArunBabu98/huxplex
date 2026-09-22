@@ -134,4 +134,4 @@ is a **G5 entry spike**, not an architecture question.
   [network wire protocol spec](../15-specifications/05-network-wire-protocol.md)
 - 2026 review: [`brainstorming/01-layer0-technology-review-2026.md`](../brainstorming/01-layer0-technology-review-2026.md) §1.1, §2.3, §3
 - [ADR-0002 (hybrid KEX)](0002-cryptographic-parameter-set.md), [ADR-0005 (build strategy)](0005-build-strategy.md), [ADR-0010 (PeerId hash)](0010-hash-function-domains.md)
-- Code: `src/network/{topic,message,peer}.rs`, `src/crypto/kem.rs`
+- Code: `crates/hux-network/src/{topic,message,peer}.rs`, `crates/hux-crypto/src/kem.rs`

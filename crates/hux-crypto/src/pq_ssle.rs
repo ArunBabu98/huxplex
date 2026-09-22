@@ -68,7 +68,7 @@ pub fn ssle_verify_leader(
 //    3. Leader reveals:  L_i  = ssle_try_reveal(sk_i, C_j')  → Some(_) iff owned
 //    4. Verify:          ssle_verify_leader(pk_i, C_j', L_i) → bool
 //
-//  Expected API (src/crypto/pq_ssle.rs):
+//  Expected API (crates/hux-crypto/src/pq_ssle.rs):
 //    pub fn ssle_keygen(seed: [u8; 32]) -> (SslePublicKey, SsleSecretKey);
 //    pub fn ssle_commit(sk: &SsleSecretKey, epoch_seed: [u8; 32]) -> SsleCommitment;
 //    pub fn ssle_shuffle(commitments: &[SsleCommitment], epoch_seed: [u8; 32])

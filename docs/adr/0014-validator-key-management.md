@@ -10,7 +10,7 @@
 per-block/per-vote signing, **SLH-DSA-128s** for long-lived validator identity/root-of-trust —
 but did not say how those keys are *generated, stored, separated, rotated, or recovered* in
 operation. The codebase derives ML-DSA seeds from a BIP32 path
-(`m/44'/931931'/0'/0'/{i}'`, `src/crypto/bip32.rs`) from a 64-byte master seed, which gives us a
+(`m/44'/931931'/0'/0'/{i}'`, `crates/hux-crypto/src/bip32.rs`) from a 64-byte master seed, which gives us a
 deterministic hierarchy to build custody on. Before validators run (devnet, Phase 1), the
 operational key model must be fixed, because key-handling mistakes (double-sign, key theft,
 unrecoverable loss) are slashing events and the #1 operational risk for stakers.
@@ -161,4 +161,4 @@ resolved.
   [key-management (PQ)](../03-post-quantum/key-management.md),
   [validator-guide](../13-operational/validator-guide.md),
   [disaster-recovery](../13-operational/disaster-recovery.md)
-- Code: `src/crypto/bip32.rs`; contexts `validator:registration:v1`, `block:{preprepare,prepare,commit}:v1`
+- Code: `crates/hux-crypto/src/bip32.rs`; contexts `validator:registration:v1`, `block:{preprepare,prepare,commit}:v1`

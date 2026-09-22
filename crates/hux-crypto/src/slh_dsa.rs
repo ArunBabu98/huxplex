@@ -48,7 +48,7 @@ pub fn slh_dsa_128s_verify(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Add to src/crypto/mod.rs:
+// Add to crates/hux-crypto/src/lib.rs:
 //   pub mod slh_dsa;
 //   pub mod lb_vrf;
 //   pub mod pq_ssle;
@@ -59,7 +59,7 @@ pub fn slh_dsa_128s_verify(
 //  SLH-DSA-128s  (FIPS 205)
 //  Hash-based stateless signature — validator long-lived identity / registration
 //
-//  Expected API (src/crypto/slh_dsa.rs):
+//  Expected API (crates/hux-crypto/src/slh_dsa.rs):
 //    pub const SLH_DSA_PK_SIZE:  usize = 32;
 //    pub const SLH_DSA_SK_SIZE:  usize = 64;
 //    pub const SLH_DSA_SIG_SIZE: usize = 7856;
@@ -430,7 +430,9 @@ mod slh_dsa_128s_tests {
     // ══════════════════════════════════════════════════════════════════════════
 
     #[test]
-    #[ignore = "GATE: G1 — not implemented; see docs/16-action-plan.md"]
+    // Not #[ignore]d: this asserts only the FIPS/spec size constants, which are real
+    // today. A gated test that passes without an implementation protects nothing while
+    // it is skipped — un-ignored, it guards the constants continuously.
     fn test_slh_dsa_pk_size_distinct_from_ml_dsa_and_kem_key_sizes() {
         // SLH-DSA-128s PK (32 B) must not collide in size with:
         //   ML-DSA-44 PK (1312 B), ML-DSA-44 SK (2560 B),
@@ -507,7 +509,9 @@ mod slh_dsa_128s_tests {
     }
 
     #[test]
-    #[ignore = "GATE: G1 — not implemented; see docs/16-action-plan.md"]
+    // Not #[ignore]d: this asserts only the FIPS/spec size constants, which are real
+    // today. A gated test that passes without an implementation protects nothing while
+    // it is skipped — un-ignored, it guards the constants continuously.
     fn test_overhead_vs_ml_dsa_44() {
         println!("=== SLH-DSA-128s vs ML-DSA-44 Signature Overhead ===");
         println!(

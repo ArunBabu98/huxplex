@@ -73,4 +73,4 @@ cache) where canonicality is irrelevant — but never for anything hashed, signe
 ## Links
 - [data model & encoding spec](../15-specifications/01-data-model-and-encoding.md)
 - [ADR-0002 crypto parameter set / suite versioning](0002-cryptographic-parameter-set.md)
-- Code: `src/network/message.rs` (`DhtEntry` manual concatenation — to migrate)
+- Code: `crates/hux-network/src/message.rs` (`DhtEntry` manual concatenation — to migrate)

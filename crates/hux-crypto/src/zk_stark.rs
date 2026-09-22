@@ -86,7 +86,7 @@ pub fn stark_verify(_proof: &StarkProof, _public_input: &[u8]) -> bool {
 //  Public inputs: task_hash, output_hash, agent_did, vc_id
 //  Private inputs: full task execution trace
 //
-//  Expected API (src/crypto/zk_stark.rs):
+//  Expected API (crates/hux-crypto/src/zk_stark.rs):
 //    pub const STARK_MIN_PROOF_BYTES: usize = 100_000;
 //    pub const STARK_MAX_PROOF_BYTES: usize = 200_000;
 //
@@ -147,7 +147,9 @@ mod zk_stark_tests {
     // ══════════════════════════════════════════════════════════════════════════
 
     #[test]
-    #[ignore = "GATE: G10 — not implemented; see docs/16-action-plan.md"]
+    // Not #[ignore]d: this asserts only the FIPS/spec size constants, which are real
+    // today. A gated test that passes without an implementation protects nothing while
+    // it is skipped — un-ignored, it guards the constants continuously.
     fn test_proof_size_constants_match_spec() {
         // Spec: "Proof size: ~100–200 KB (zk-STARK, no trusted setup)"
         assert_eq!(

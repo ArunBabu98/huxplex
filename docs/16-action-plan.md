@@ -284,7 +284,7 @@ functions; the TCHAO conflict-graph scheduler
 
 ## G5 · Transport and the P2P layer
 
-> Runs **in parallel** with G3/G4. Today `src/network/` defines message *types* only — there
+> Runs **in parallel** with G3/G4. Today `crates/hux-network/` defines message *types* only — there
 > is no swarm, no transport, no peer state machine.
 
 **Unblocks:** G6. **Entry:** G2.
