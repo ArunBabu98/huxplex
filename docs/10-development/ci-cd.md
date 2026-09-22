@@ -58,6 +58,39 @@ Every PR must pass all stages. Merges to default are gated.
 - **SBOM** generated per release; dependency provenance recorded.
 - Build in a hermetic environment (container with pinned digest).
 
+### The recipe — NORMATIVE (G0-T2) 🟢
+
+Run it: **`./scripts/check-reproducible.sh`**. It stages two independent clean copies of the
+source, builds each at the canonical path, and compares artifact hashes.
+
+| Ingredient | Value | Why |
+|---|---|---|
+| Toolchain | `rust-toolchain.toml` → **1.85.0** | Compiler version changes codegen |
+| Dependencies | `cargo build --locked` | An unlocked resolve is a different program |
+| Timestamps | `SOURCE_DATE_EPOCH=1600000000` | Fixes any embedded build time |
+| Path erasure | `--remap-path-prefix=<canonical>=/huxplex`, `--remap-path-prefix=<CARGO_HOME>=/cargo` | Absolute paths leak into debug info |
+| **Canonical build path** | **`/tmp/hux-reproducible-build`** (override with `HUX_BUILD_PATH`) | See below — load-bearing |
+
+> **Why a canonical build path is required, and is not a workaround.**
+> `--remap-path-prefix` takes the absolute source path as its *argument*, so building at two
+> different paths yields two different `RUSTFLAGS` strings. `RUSTFLAGS` feeds rustc's
+> `-C metadata` hash, which feeds symbol names — so the artifacts differ even when the source
+> is identical. **Erasing the path from the output does not erase it from the flag that erased
+> it.** Debian, Nix and others solve this the same way: agree on one build path. Two builders
+> following this recipe get identical bytes; one who ignores it does not, and that is a
+> property of Rust rather than a defect here.
+
+**Status:** ✅ passing on the pure-Rust tree as of 2026-09-22 — `libhux_crypto.rlib` and
+`libhux_network.rlib` byte-identical across two independent clean copies.
+
+> ⚠️ **This baseline must be re-verified at G5.** `aws-lc-rs` ([ADR-0019](../adr/0019-transport-authentication.md))
+> compiles C and assembly at build time, so the **C toolchain becomes part of the recipe** and
+> `rust-toolchain.toml` alone stops determining the output bytes. Pinning it (a container image
+> with a fixed `cc`) is ADR-0019 condition 3 and G0 item 8. If reproducibility cannot be
+> restored after that dependency lands, it is a **stop condition** — the decision returns to the
+> options in ADR-0019's addendum rather than the requirement being weakened. See
+> [`18-implementation-plan/04-sequencing-and-risks.md`](../18-implementation-plan/04-sequencing-and-risks.md) R4.
+
 ## Release process
 
 ```mermaid
@@ -101,6 +134,7 @@ graph LR
 ---
 
 ### Open Questions
-- Which reproducible-build approach (Nix, pinned container, `cargo` deterministic flags) gives byte-identical artifacts across machines?
+- ~~Which reproducible-build approach (Nix, pinned container, `cargo` deterministic flags) gives byte-identical artifacts across machines?~~ ✅ **Answered 2026-09-22:** pinned toolchain + `--locked` + `SOURCE_DATE_EPOCH` + `--remap-path-prefix` + a **canonical build path**, verified by `scripts/check-reproducible.sh`. Re-open at G5 when `aws-lc-rs` brings a C toolchain into the recipe.
+- Does the recipe hold **across machines and operating systems**, not just across two checkouts on one host? (The script proves the second; a multi-party attestation job proves the first, and is a Production item.)
 - Coverage floors per crate — what's meaningful vs. gameable?
 </content>

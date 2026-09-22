@@ -23,6 +23,9 @@ future maintainers inherit the *reasoning*, not just the conclusion (Principle #
 | [0014](0014-validator-key-management.md) | Validator key management & custody (hot/cold tiers) | Accepted |
 | [0015](0015-connector-architecture.md) | Connector architecture — wrap MCP, never widen authority | Accepted |
 | [0016](0016-evidence-and-attestation.md) | Evidence model — typed claims, classed trust, no truth by signature | Accepted |
+| *0017* | *(reserved — reconcile the two intent models; blocks G10)* | — |
+| [0018](0018-signature-role-profiles.md) | Signature role profiles — the suite descriptor is `(role, version)` | Accepted |
+| [0019](0019-transport-authentication.md) | Transport authentication — native ML-DSA TLS certificates over QUIC | Accepted |
 
 ## Process
 

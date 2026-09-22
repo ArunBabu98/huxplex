@@ -19,6 +19,7 @@ preserves it, clearly quarantined from normative content.
 | File | What it is | Author |
 |---|---|---|
 | [`00-arun-babu-founding-notes.md`](00-arun-babu-founding-notes.md) | The substrate walkthrough — layer stack, intents, visas, connectors, evidence, and the full Canon-DSLR worked example. Transcribed from 50 handwritten pages. | **Arun Babu**, creator of Huxplex (Sept 2026) |
+| [`01-layer0-technology-review-2026.md`](01-layer0-technology-review-2026.md) | Every L0 choice — PQ suite, transport, handshake, gossip, DHT, peer identity, hashing — measured against the September 2026 state of the art. What is validated, what is behind, what to watch. Ten actions arising. | Architecture review (Sept 2026) |
 
 ## Status of ideas in this folder
 
@@ -198,6 +199,33 @@ mission doc.
 | Adopt the sharper mission sentence | `01-vision/mission.md` | ⬜ Low |
 
 These are tracked as gate items in [`../16-action-plan.md`](../16-action-plan.md).
+
+---
+
+# Actions arising from `01-layer0-technology-review-2026.md`
+
+Tracked in full, with evidence, in [that file's §7](01-layer0-technology-review-2026.md#7-actions-arising).
+Summary:
+
+| Action | Target | Gate | Status |
+|---|---|---|---|
+| ADR: role-separated signature profiles (`(role, version)` suite descriptor) | [ADR-0018](../adr/0018-signature-role-profiles.md) | **G1** | ✅ **Accepted 2026-09-22** |
+| Re-run R-A2 (ML-DSA-44 vs -65) per role | [R-A2](../11-research/open-problems.md) | G1 | ✅ **v1 decided: ML-DSA-44.** Open for mainnet |
+| Generalize all contexts to `{network}`; hedged signing; initiator-first ordering | [crypto spec](../15-specifications/02-cryptography-spec.md) §3, §4.2, §5 | G1 | ✅ **Decided 2026-09-22** (code + spec) |
+| Guardrail: the wire spec must not assume gossip is the only block path | [wire spec](../15-specifications/05-network-wire-protocol.md) §5.1 | G5 | ✅ **Decided 2026-09-22** |
+| ADR: block propagation — erasure-coded broadcast for blocks, GossipSub for control | `adr/0020-*` | G6 | ⬜ Open (guardrail in place; full ADR at G6) |
+| BIP32 **purpose level** — `m/44'/931931'/{purpose}'/0'/{index}'`, purpose `1'` reserved for aggregation | [crypto spec §4.1](../15-specifications/02-cryptography-spec.md), [ADR-0014](../adr/0014-validator-key-management.md) | **G1** | ✅ **Decided 2026-09-22** (code + spec) |
+| ADR: which aggregation scheme, and its key lifetime vs. rotation cadence | `adr/0021-*` | G6 | ⬜ Open (room reserved; scheme choice deferred) |
+| Transport authentication — native ML-DSA TLS certificates over QUIC | [ADR-0019](../adr/0019-transport-authentication.md) | **G5** | ✅ **Accepted 2026-09-22** |
+| Set key-epoch rotation cadence from the 190k-signature bound | [ADR-0014](../adr/0014-validator-key-management.md), R-A9 | G1, G5 | ⬜ Open |
+| Replace LB-VRF with iVRF in the suite table | [ADR-0002](../adr/0002-cryptographic-parameter-set.md), R-A3 | G6 | ⬜ Open (v1 excludes both) |
+| Record that upstream libp2p PQ covers confidentiality only | [`networking.md`](../02-architecture/networking.md) | G5 | ✅ Done |
+| Reframe R-A1 as a candidate comparison | [R-A1](../11-research/open-problems.md) | G6 | ✅ Done |
+| Fold L0 findings into the landscape doc | [`17-landscape-2026.md`](../17-landscape-2026.md) §6 | — | ✅ Done |
+
+> **Sequencing note.** The role dimension was the one item with a closing window — cheap before
+> G2's canonical encoding, a state migration after. It is now closed by
+> [ADR-0018](../adr/0018-signature-role-profiles.md).
 
 ---
 

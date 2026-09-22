@@ -49,6 +49,23 @@ Phase-0 benchmarks (R-A2). Because of agility, this is a parameter change, not a
 - ➖ LB-VRF / PQ-SSLE constructions are less mature (R-A3) — devnet may use classical-randomness
   fallback initially.
 
+## Review note — 2026-09-22
+
+A Layer-0 technology review against the 2026 state of the art
+([`brainstorming/01-layer0-technology-review-2026.md`](../brainstorming/01-layer0-technology-review-2026.md))
+**does not disturb this decision** — Option B (diversity behind an agility registry) is the
+year's best-supported call, given the May 2026 Luo preprint claiming (and failing to establish)
+a quantum break of ML-KEM, and the February 2026 MLWE/LWE hardness-gap result. Four items are
+recorded here for the ADRs that will amend the suite table; none is actioned by this note.
+
+| # | Finding | Bearing |
+|---|---|---|
+| 1 | **The suite has no *role* dimension.** arXiv:2609.24689 shows transaction authorization and quorum certification are different design problems; `Transaction` and `Vote` are currently pinned to one scheme | `algo_suite` should be `{role, version}`. Must be settled **before G1 builds the registry** — later it is a state migration. Proposed `adr/0018-*` |
+| 2 | **R-A2 has moved toward Cat 3.** Sui chose ML-DSA-65 over 44 (AI-assisted attacks on lattice schemes; verification at Ed25519 parity); CNSA 2.0 mandates ML-DSA-87. Against that, BSC shipped ML-DSA-44 and measured **40–50% TPS loss**. Separately, genesis pairs a **Cat-1 signature with a Cat-3 KEX**, which was not deliberate | Re-run R-A2 **per role**, not globally |
+| 3 | **LB-VRF is superseded by iVRF** — hash-based, 0.02 ms eval/verify (faster than the classical ECVRF Algorand uses), no ZK proof of correct PRF evaluation, +32 B for forward security. It also moves consensus randomness off the lattice family | Amend the suite table and R-A3, subject to verifying the uniqueness properties map to a bounded Q-BFT validator set |
+| 4 | **Implementation attacks, not cryptanalysis, are the live threat**: ML-DSA secret-key recovery from sign leakage at **190,000 signatures** (eprint 2026/1366) — days of validator signing — plus fault attacks whose vulnerable pattern is verified present in PQM4, liboqs, PQClean and wolfSSL | Makes key-epoch rotation cadence a cryptographic parameter (ADR-0014) and the multi-vendor rule a requirement |
+
 ## Links
 - [crypto-agility](../03-post-quantum/crypto-agility.md), [pq-cryptography](../03-post-quantum/pq-cryptography.md), [cryptography](../02-architecture/cryptography.md)
+- 2026 review: [`brainstorming/01-layer0-technology-review-2026.md`](../brainstorming/01-layer0-technology-review-2026.md) §1.2, §2.1, §2.2, §2.4, §4
 </content>
