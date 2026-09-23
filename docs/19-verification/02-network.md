@@ -44,12 +44,29 @@ Both message types are signed by the sender, not by a relay:
 | Type | Signed over | Context |
 |---|---|---|
 | `GossipMessage` | `payload` | `huxplex-{network}:gossip:{topic}:v1` |
-| `DhtEntry` | `key ‖ value` | `huxplex-{network}:dht:entry:v1` |
+| `DhtEntry` | `u64_be(len(key)) ‖ key ‖ u64_be(len(value)) ‖ value` | `huxplex-{network}:dht:entry:v1` |
 
 **Why it matters:** a relay that could mint traffic would be a trusted party in a system whose
 whole premise is not having one. Verification recomputes the context from the message's **own**
 `topic` and `network` fields, so tampering with either invalidates the signature rather than
 changing what gets checked.
+
+> **Why `DhtEntry` frames its fields — worth checking yourself.** Until 2026-09-23 the payload
+> was the bare concatenation `key ‖ value`. That does not record where the key ends, so
+> `("abc","XY")` and `("ab","cXY")` sign identically, and `verify()` — which rebuilds the payload
+> from the record's own fields — accepted the re-split. Anyone who saw a signed record could
+> republish that signature **under a different DHT key**, holding no private key. The key decides
+> routing, so that is routing-table poisoning for free.
+>
+> Try to break it: take a valid entry, move a byte from the end of `key` to the front of `value`,
+> and verify. It must fail. That is
+> `test_dht_entry_key_value_boundary_is_unambiguous`.
+>
+> Note what did *not* catch this. The three tamper tests mutate `key` or `value` independently,
+> which changes the concatenation, so they passed throughout. An attack that preserves the
+> concatenation was outside what they asked. Tamper tests check that changing a field breaks the
+> signature; they do not check that the encoding is *unambiguous*. Those are different
+> properties, and only the second one forbids two distinct records sharing a signature.
 
 ```bash
 cargo test -p hux-network gossip

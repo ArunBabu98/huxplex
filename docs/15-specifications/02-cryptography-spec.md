@@ -247,13 +247,37 @@ hex(PeerId) = 64 lowercase hex chars
 - **GossipMessage** = `{ topic, network, payload, sig, from }`. `sig` is ML-DSA-44 over `payload`
   with context `gossip_context(network, topic)`. `verify()` recomputes the context from the
   message's own `topic`/`network`, so tampering with either invalidates the signature.
-- **DhtEntry** = `{ key, value, sig, signer_pk }`. `sig` is ML-DSA-44 over `key || value` (byte
-  concatenation) with context `huxplex-mainnet:dht:entry:v1`. The DHT key SHOULD equal the
-  signer's `PeerId`.
+- **DhtEntry** = `{ key, value, network, sig, signer_pk }`. `sig` is ML-DSA-44 over the
+  **length-framed** payload
 
-> Note ([ADR-0011](../adr/0011-canonical-serialization.md)): the `key || value` concatenation is
-> the grandfathered primitive encoding. Structured objects (tx, block, resource) MUST use the
-> canonical `Codec` (postcard) instead — see [01-data-model-and-encoding](01-data-model-and-encoding.md).
+  ```text
+  u64_be(len(key)) ‖ key ‖ u64_be(len(value)) ‖ value
+  ```
+
+  with context `dht_entry_context(network)` = `huxplex-{network}:dht:entry:v1`. The DHT key
+  SHOULD equal the signer's `PeerId`.
+
+> ⚠️ **Corrected 2026-09-23 — this was a live forgery, not a style concession.** The payload was
+> specified and implemented as the bare concatenation `key || value`, described below as "the
+> grandfathered primitive encoding." Concatenation does not encode the field boundary, so
+> `("abc","XY")` and `("ab","cXY")` produce identical signed bytes. `DhtEntry::verify`
+> recomputes the payload from its own fields, so it **accepted** a record whose key had been
+> re-split — letting an attacker republish a publisher's signature under a different DHT key
+> without any key material. Because the key decides routing, that is routing-table poisoning by
+> a peer that holds nothing.
+>
+> This falsified **G5-T5** and is precisely the ambiguity **G2-T2** forbids: two distinct values
+> must never share one encoding. Framing both fields fixes it; it is normative, and it changes
+> the signed bytes (free now, since no network exists — expensive after one does). Pinned by
+> `test_dht_entry_key_value_boundary_is_unambiguous` and
+> `test_dht_entry_empty_key_and_empty_value_are_distinguishable`.
+>
+> **The general lesson:** ad-hoc concatenation of variable-length fields is never a neutral
+> shortcut — it is an encoding decision, and an ambiguous one. Per
+> [ADR-0011](../adr/0011-canonical-serialization.md), structured objects (tx, block, resource)
+> MUST use the canonical `Codec` (postcard) — see
+> [01-data-model-and-encoding](01-data-model-and-encoding.md). Where a primitive encoding
+> genuinely predates the codec, it MUST still frame every variable-length field.
 
 ## 7. Test vectors (Known-Answer Tests)
 

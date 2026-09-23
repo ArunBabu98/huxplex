@@ -98,6 +98,64 @@ fn test_dht_entry_cross_network_replay_fails() {
 }
 
 #[test]
+fn test_dht_entry_key_value_boundary_is_unambiguous() {
+    // The signed payload frames each field with its length. Without that, the payload is the
+    // bare concatenation `key || value`, and the boundary between them is not recoverable from
+    // the bytes — so ("abc", "XY") and ("ab", "cXY") sign identically.
+    //
+    // That is not a tidiness point. The DHT key decides routing and lookup, so an attacker who
+    // observes any signed record can re-split it and republish the publisher's signature under
+    // a DIFFERENT key, with no key material at all. G5-T5 requires exactly the opposite: "a
+    // record signed for one key cannot be republished under another."
+    //
+    // The existing tamper tests do not catch this, because they mutate key or value
+    // independently and so change the concatenation. This attack preserves it.
+    let kp = make_keypair(0x10);
+
+    let honest = DhtEntry::sign(&kp, b"abc".to_vec(), b"XY".to_vec(), "mainnet").unwrap();
+    assert!(honest.verify().unwrap(), "the honest record must verify");
+
+    let forged = DhtEntry {
+        key: b"ab".to_vec(),
+        value: b"cXY".to_vec(),
+        network: honest.network.clone(),
+        sig: honest.sig.clone(),
+        signer_pk: honest.signer_pk.clone(),
+    };
+
+    assert!(
+        !forged.verify().unwrap(),
+        "a record signed for key {:?} must not verify under key {:?}",
+        honest.key,
+        forged.key
+    );
+}
+
+#[test]
+fn test_dht_entry_empty_key_and_empty_value_are_distinguishable() {
+    // The degenerate case of the same bug: ("", "AB") and ("AB", "") concatenate identically.
+    let kp = make_keypair(0x11);
+
+    let empty_key = DhtEntry::sign(&kp, Vec::new(), b"AB".to_vec(), "mainnet").unwrap();
+    let empty_value = DhtEntry::sign(&kp, b"AB".to_vec(), Vec::new(), "mainnet").unwrap();
+
+    assert!(empty_key.verify().unwrap());
+    assert!(empty_value.verify().unwrap());
+
+    let swapped = DhtEntry {
+        key: b"AB".to_vec(),
+        value: Vec::new(),
+        network: empty_key.network.clone(),
+        sig: empty_key.sig.clone(),
+        signer_pk: empty_key.signer_pk.clone(),
+    };
+    assert!(
+        !swapped.verify().unwrap(),
+        "an empty-key record must not verify as an empty-value record"
+    );
+}
+
+#[test]
 fn test_dht_entry_key_matches_peer_id_of_signing_key() {
     // Best practice: the DHT key should be the peer's own PeerId.
     // This test verifies the binding is consistent.
