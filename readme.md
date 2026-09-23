@@ -18,7 +18,7 @@ artificial agent networks.
 
 Huxplex is **building Layer 0**: a post-quantum cryptographic and networking substrate. Not a
 blockchain yet — there is no ledger, consensus, VM or transport — and Layer 0 itself is roughly
-**one third complete** ([audited status](docs/20-completion/)). What exists is small enough to
+**45% complete** ([audited status](docs/20-completion/)). What exists is small enough to
 read in an afternoon, and checkable in under two minutes:
 
 ```bash

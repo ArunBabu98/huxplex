@@ -57,7 +57,8 @@ finished.
 unlock each gate are in [`../18-implementation-plan/`](../18-implementation-plan/) and
 [`../16-action-plan.md`](../16-action-plan.md). For where the project actually stands against
 them — audited, with the commands behind every claim — see
-[`../20-completion/`](../20-completion/). As of 2026-09-23: **G0 closed; G1 and G5 not started.**
+[`../20-completion/`](../20-completion/). As of 2026-09-23: **G0 closed; G1 about half done (the
+agility registry is in, SLH-DSA and the KATs are not); G5 not started.**
 
 ## What each automated check proves
 
