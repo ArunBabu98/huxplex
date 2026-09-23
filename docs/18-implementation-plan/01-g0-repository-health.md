@@ -12,8 +12,8 @@
 | ID | Item | Status |
 |---|---|---|
 | **G0-4** | Split `src/crypto/mod.rs` (3,607 lines) | ✅ done via [W2](00-workspace-migration.md) — `lib.rs` is now 36 lines |
-| **G0-5** | CI on `x86_64` **and** `aarch64` | 🔴 matrix configured (`ubuntu-latest`, `ubuntu-24.04-arm`, `macos-latest`); **it cannot currently run at all** — see below |
-| **G0-8** *(new 2026-09-23)* | The G0-T1 **negative case** — a deliberate `avx2::` call must fail the aarch64 job | ⬜ not written |
+| **G0-5** | CI on `x86_64` **and** `aarch64` | ✅ green on three (`ubuntu-latest`, `ubuntu-24.04-arm`, `macos-latest`) after [PR #9](https://github.com/ArunBabu98/huxplex/pull/9) — see below |
+| **G0-8** *(new 2026-09-23)* | The G0-T1 **negative case** — a deliberate `avx2::` call must fail the aarch64 job | ✅ done — two scripts, see below |
 | **G0-T2** | Reproducible builds — bit-identical artifacts across two clean checkouts | ✅ `scripts/check-reproducible.sh` passing |
 | **G0-6** *(new)* | `PrivateKey` derives `Debug` — **secret-leak bug** | ✅ fixed 2026-09-22 |
 | **G0-7** *(new)* | C-toolchain pin, required by [ADR-0019](../adr/0019-transport-authentication.md) condition 3 | ⏸️ **deferred to G5 by design** — `aws-lc-rs` is not in the tree yet; see below |
@@ -59,14 +59,14 @@ trusting a green tick.
 > This is the kind of finding G0 exists for: the crypto is correct, and the *plumbing around it*
 > leaks. Worth checking `Signature` and any future `SecretKey` type for the same pattern.
 
-## G0-5 — dual-architecture CI 🔴 *configured, and unable to run*
+## G0-5 — dual-architecture CI ✅ *green on three architectures*
 
 **Done:** `.github/workflows/ci.yml` now runs an explicit matrix —
 `ubuntu-latest` (x86_64), `ubuntu-24.04-arm` (aarch64) and `macos-latest` (aarch64 Darwin) —
 each reporting `uname -m` and `rustc -vV`, then running `cargo test --all-features --locked` and
 both self-verifying walkthroughs.
 
-### The blocker, found 2026-09-23
+### The blocker, found and fixed 2026-09-23
 
 The workflow triggers on:
 
@@ -86,13 +86,28 @@ So the matrix is not "unproven until it runs". It *cannot* run. The same is true
 gate, the reproducible-build job, and the `Security` (cargo-deny) workflow, none of which have
 ever seen the workspace lockfile.
 
-**Fix — either, preferably both:**
+**Fixed by** [PR #9](https://github.com/ArunBabu98/huxplex/pull/9) (merged `7912117`), which fired
+`CI` and `Security` for the first time. Result — `gh run view 35854233815`, 8/8 jobs green:
 
-1. Open a PR for the branch. This alone fires `CI` and `Security` for the first time.
-2. Widen the `push` trigger to cover working branches, e.g. `branches: [master, 'layer0/**']`,
-   so long-running Layer-0 branches get feedback without a PR.
+| Leg | `uname -m` | Tests |
+|---|---|---|
+| `ubuntu-latest` | `x86_64` | 115 · 0 · 81 |
+| `ubuntu-24.04-arm` | `aarch64` | 115 · 0 · 81 |
+| `macos-latest` | `arm64` | 115 · 0 · 81 |
 
-### The local x86-64 evidence is weaker than it looks
+Plus the reproducible-build job and cargo-deny, both on a runner for the first time.
+
+> The `push` trigger still covers only `master`, so a PR is what fires CI. Widening it to
+> `branches: [master, 'layer0/**']` would give long-running branches feedback without one —
+> optional, since the PR route works.
+
+**The result worth keeping.** Diffing the walkthrough output across all three legs: the *only*
+differing lines are the architecture name each program prints about itself. Every derived value —
+the five HD purpose seeds, `PeerId`s, shared secrets — is **byte-identical**. That is the
+cross-architecture check [`../19-verification/README.md`](../19-verification/README.md) asks
+contributors to run, and it upgrades backend agreement from a claim to a measurement.
+
+### Why the local x86-64 evidence was not enough
 
 The full suite does pass for `--target x86_64-apple-darwin` (115 tests, identical to native
 aarch64). But probing that translated environment directly:
@@ -108,25 +123,47 @@ Rosetta 2 exposes no AVX2 on Apple Silicon, so libcrux's multiplexing dispatcher
 `cfg(target_arch = "x86_64")` was compiled but **never executed** — and that is exactly the code
 path whose absence on aarch64 caused the original G0 break.
 
-Native x86-64 hardware remains unproven. Only the CI matrix can prove it.
-
-**Still to add (G0-8):** the negative half of G0-T1 — a deliberate `avx2::` call must *fail* the
-aarch64 job. A matrix that only ever passes does not prove it would catch the regression it exists
-for. Worth pairing with a cheap static guard: a CI grep forbidding `::avx2::`, `::neon::`,
-`::simd256::` and `::simd128::` outside a manifest. The grep proves nobody wrote the call; the
-negative case proves the matrix would notice if they did.
+Only native x86-64 hardware could settle it, and only CI had that. It now has.
 
 **Why it is load-bearing:** G0's own standing rule — *"a PQ chain whose crypto builds on only one
 ISA cannot have a diverse validator set."* The original G0 break was exactly this (an
 unconditional `mlkem768::avx2::*` call). Nothing prevents a recurrence except CI.
 
 **Acceptance (G0-T1):** `cargo test --all-targets --all-features --locked` green on both targets
-**in CI**, and a deliberate `avx2::` call fails the aarch64 job.
+**in CI**, and a deliberate `avx2::` call fails the aarch64 job. **Both met.**
 
-> **Note the invocation mismatch** (found 2026-09-23): this acceptance line says `--all-targets`,
-> while CI and `scripts/verify-layer0.sh` both run `--all-features`. Neither combines the two, and
-> `--all-targets` excludes doctests. Settle on one invocation and use it identically in all three
-> places.
+> **Invocation mismatch, resolved.** The acceptance line said `--all-targets` while CI and
+> `scripts/verify-layer0.sh` ran `--all-features`; neither combined them, and `--all-targets`
+> excludes doctests. All three now use `cargo test --all-targets --all-features --locked`, with
+> an explicit `cargo test --doc --all-features --locked` alongside. There are no doctests today —
+> the `--doc` run guards the case where someone adds one.
+
+## G0-8 — the negative case ✅ *done 2026-09-23*
+
+*A matrix that only ever passes does not prove it would catch the regression it exists for.* Two
+scripts, because neither substitutes for the other:
+
+**[`scripts/check-arch-portability.sh`](../../scripts/check-arch-portability.sh)** — proves nobody
+*wrote* a direct backend path. Scans `crates/*/src` and `crates/*/tests` for `::avx2::`,
+`::neon::`, `::simd256::`, `::simd128::` and `::portable::`. Two deliberate exemptions: whole-line
+comments (so `kem.rs` can explain the rule by naming the forbidden path) and `Cargo.toml` (where
+`simd256`/`simd128` are target-gated *features*, which is precisely how a backend should be
+chosen). Runs in the `static gates` CI job. Verified to fail on an injected violation, not just to
+pass on a clean tree.
+
+**[`scripts/check-arch-negative.sh`](../../scripts/check-arch-negative.sh)** — proves the build
+would *notice* if they did. Stages a throwaway copy of the **working tree** (so an uncommitted
+regression is caught too), appends a function calling `mlkem768::avx2::generate_key_pair`, and
+asserts `cargo check` rejects it:
+
+```
+error[E0433]: failed to resolve: could not find `avx2` in `mlkem768`
+```
+
+Two guards against a false pass: it **skips on x86-64**, where the backend genuinely exists and
+rejecting it would prove nothing; and it requires the compiler output to actually mention
+`avx2`/`E0433`, so an unrelated compile error cannot be misread as success. Runs on the aarch64
+matrix legs (`if: matrix.arch != 'x86_64'`) and in `verify-layer0.sh`.
 
 ## G0-7 — C-toolchain pin ⏸️ *deferred to G5, deliberately*
 
@@ -182,12 +219,16 @@ clean copies.
 | `PrivateKey` no longer prints secrets | ✅ |
 | G0-T2 — automated two-build comparison | ✅ |
 | G0-T3 — all 81 ignored tests carry a `GATE:` label | ✅ |
-| G0-T1 — green on **both architectures in CI** | 🔴 configured, but CI cannot run on this branch (G0-5) |
-| G0-T1 negative case — a deliberate `avx2::` call fails the aarch64 job | ⬜ G0-8 |
+| G0-T1 — green on **both architectures in CI** | ✅ green on **three**, with byte-identical derived values |
+| G0-T1 negative case — a deliberate `avx2::` call fails the aarch64 job | ✅ G0-8 |
 
-**G0 is not closed.** Two items remain, both on the CI side. Nothing in G1 or G5 should start
-until G0-T1 has actually run green on both architectures — the whole point of the gate is that
-an unproven claim about portability is how the repository broke in the first place.
+**G0 is CLOSED (2026-09-23).** G0-7 (the C-toolchain pin) remains deliberately deferred to G5.
+
+The gate did its job in the end: it was an *unproven* claim about portability that broke the
+repository originally, and the audit found the proof mechanism had never been switched on. It is
+now, it is green on three architectures, and it has a negative case proving it would fail if the
+break returned. **G1 may begin** — registry first, per
+[04-sequencing-and-risks](04-sequencing-and-risks.md) rule 1.
 
 > Audited status, with the commands behind every row:
 > [`../20-completion/00-layer0-v1-completion-report.md`](../20-completion/00-layer0-v1-completion-report.md) §3.

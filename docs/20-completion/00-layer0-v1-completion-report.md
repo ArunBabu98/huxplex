@@ -1,7 +1,7 @@
 # 00 — Layer 0 / v1 completion report
 
-> **Audit date:** 2026-09-23 · **Commit:** `63ad3d5` · **Branch:** `layer0/g0-workspace-and-verification`
-> **Host:** `aarch64-apple-darwin` (Apple M4), rustc 1.85.0 (pinned)
+> **Audit date:** 2026-09-23 · **Originally at:** `63ad3d5` · **Updated after:** `7912117` (PR #9 merged) and G0-8
+> **Host:** `aarch64-apple-darwin` (Apple M4), rustc 1.85.0 (pinned), plus the three CI legs
 >
 > Method: run the tree, read the source, query CI. Every ✅ and ❌ below has a command behind it.
 > Where this report and the blueprint disagree, this report is describing what happened and the
@@ -19,11 +19,11 @@ Layer 0 is complete when **G0**, **G1** and **G5** have all closed. Measured aga
 
 | | Criterion (verbatim from that table) | Reality | |
 |---|---|---|---|
-| **G0** | Workspace split; dual-architecture CI green; reproducible builds demonstrated by an automated two-build comparison; no secret printable via `Debug` | Workspace ✅ · reproducibility ✅ · `Debug` ✅ · **dual-architecture CI has never run** ❌ | 🟦 |
+| **G0** | Workspace split; dual-architecture CI green; reproducible builds demonstrated by an automated two-build comparison; no secret printable via `Debug` | Workspace ✅ · reproducibility ✅ · `Debug` ✅ · **CI green on three architectures** ✅ | 🟢 **CLOSED** |
 | **G1** | Registry is the only path to a primitive; SLH-DSA green with 24 tests un-ignored; KATs byte-exact on both architectures; G1-T1 and G1-T6 green | No registry, no SLH-DSA, no KAT fixtures, no role dimension in code. 0 of 11 tasks | 🔴 |
 | **G5** | 5 nodes mutually authenticate over QUIC with ML-DSA certificates, discover via Kademlia, gossip under 20% loss; G5-T6 and G5-T7 green | No transport, no swarm, no TLS, no peer state machine. The entry spike (N0) has not been run | 🔴 |
 
-One gate near-closed, two untouched. **Roughly one third of Layer 0 exists.**
+One gate closed, two untouched. **Roughly one third of Layer 0 exists.**
 
 A second, wider reading of the question — *is v1 complete?* — resolves the same way and more
 emphatically: v1 is the 3–5 node devnet of
@@ -41,8 +41,11 @@ G3 (ledger), G4 (execution), G6 (consensus) and G7 (devnet) have no code whatsoe
 | Test suite | `cargo test --all-features --locked` | **115 passed · 0 failed · 81 ignored** (hux-crypto 76 + 81 ignored; hux-network 39) |
 | Gate labels (G0-T3) | `grep -rn '#\[ignore' crates/` | **81/81 labelled** — `GATE: G1` ×22, `GATE: G6+` ×33, `GATE: G10` ×26 |
 | Supply chain | `cargo deny check advisories licenses bans sources` | **ok** — one documented, owned, dated advisory exception (`RUSTSEC-2026-0173`) |
-| Second architecture | `cargo test --all-features --locked --target x86_64-apple-darwin` | **115 passed** — but see §3.2, this is Rosetta and it proves less than it appears to |
-| CI history | `gh run list --branch layer0/g0-workspace-and-verification` | **empty — zero runs** |
+| Second architecture (local) | `cargo test --all-features --locked --target x86_64-apple-darwin` | **115 passed** — but see §3.2, this is Rosetta and it proves less than it appears to |
+| CI history *(at audit time)* | `gh run list --branch layer0/g0-workspace-and-verification` | **empty — zero runs** |
+| **CI matrix** *(after PR #9)* | `gh run view 35854233815` | **8/8 jobs green.** `x86_64` / `aarch64` / `arm64`, each **115 · 0 · 81** — see §3.1 |
+| **Cross-architecture agreement** | walkthrough output diffed across all three legs | **Identical** but for the architecture name each program prints — see §3.2 |
+| **G0-8 negative case** | `./scripts/check-arch-negative.sh` | **PASS** — injected `mlkem768::avx2::*` rejected with `E0433` on aarch64 |
 
 ### 2.1 Corrected figures
 
@@ -53,15 +56,15 @@ part of this audit; the list is in [`01-outstanding-work.md` §5](01-outstanding
 
 ---
 
-## 3. G0 · Repository health — 🟦 near-closed, two items open
+## 3. G0 · Repository health — 🟢 CLOSED 2026-09-23
 
-Everything G0 was written to fix has been fixed, and fixed well. What has not happened is the
+Everything G0 was written to fix had been fixed, and fixed well. What was missing was the
 *proof* — and G0's whole thesis is that an unproven claim about portability is how the repository
-broke in the first place.
+broke in the first place. Both halves of that proof now exist.
 
-### 3.1 The blocking finding: CI cannot run on this branch
+### 3.1 The blocking finding, and its resolution
 
-[`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) triggers on:
+**The finding.** [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) triggered on:
 
 ```yaml
 on:
@@ -70,50 +73,68 @@ on:
   pull_request:
 ```
 
-The Layer-0 work is five commits on `layer0/g0-workspace-and-verification`. The branch is pushed
-to `origin`. **No pull request exists for it.** Therefore neither trigger fires, and `gh run list`
-for the branch returns nothing. The newest `CI` run of any kind is **2026-09-12** — before commit
-`8dbc640` created the workspace.
+The Layer-0 work was five commits on `layer0/g0-workspace-and-verification`, pushed to `origin`
+with **no pull request**. Neither trigger fired, `gh run list` for the branch returned nothing,
+and the newest `CI` run of any kind was **2026-09-12** — before commit `8dbc640` created the
+workspace. The architecture matrix, the layering gate, the reproducible-build job and the
+`Security` workflow had therefore never seen the workspace at all.
 
-The practical consequences, all of which read as "configured" in the current docs:
-
-- the **architecture matrix** (`ubuntu-latest` / `ubuntu-24.04-arm` / `macos-latest`) has never executed;
-- the **layering gate** (`scripts/check-layering.sh`) has never executed in CI;
-- the **reproducible-build job** has never executed in CI;
-- the **`Security` workflow** (cargo-deny) has likewise not run against the workspace lockfile — its
-  last run, 2026-09-21, was the weekly schedule against `master`, which predates the split.
-  *(It passes locally; see §2. But CI has not confirmed it.)*
-
-This is not a code defect. It is the gap between "wired" and "ran", which is precisely the
-distinction G0 exists to enforce — standing rule #1 of
+That was not a code defect. It was the gap between "wired" and "ran" — precisely the distinction
+G0 exists to enforce, per standing rule #1 of
 [`16-action-plan.md`](../16-action-plan.md#4-standing-rules): *a gate is done when its
 high-concept tests pass in CI, not when the code is written.*
 
-**Fix:** open a PR for the branch (or add the branch pattern to the `push` trigger). Five minutes
-of work converts the largest open question in G0 into a result.
+**The resolution.** [PR #9](https://github.com/ArunBabu98/huxplex/pull/9), merged as `7912117`.
+First CI run in the repository's history against the workspace — `gh run view 35854233815`:
 
-### 3.2 The x86-64 evidence is weaker than it looks
+| Job | Result |
+|---|---|
+| rustfmt · clippy · doc build | ✓ |
+| static gates (layering) | ✓ |
+| test (x86_64) · test (aarch64) · test (aarch64-darwin) | ✓ **115 · 0 · 81** each |
+| reproducible build (G0-T2) | ✓ on a runner, first time |
+| cargo-deny (`Security` workflow) | ✓ against the workspace lockfile, first time |
 
-This audit ran the full suite against the `x86_64-apple-darwin` target on an Apple M4 — 115 tests
-passed, identical to the native aarch64 run. That is encouraging and it is **not** G0-T1.
+### 3.2 Cross-architecture agreement — the result worth keeping
 
-Probing the translated environment directly:
+[`19-verification/README.md`](../19-verification/README.md) asks contributors to run the
+walkthroughs on two architectures and confirm the printed key, `PeerId` and shared-secret values
+are **identical**, since they are deterministic in their seeds. Doing that across all three CI
+legs:
 
 ```
-avx2   = false
-avx    = false
-sse4.2 = true
+x86_64 vs aarch64-linux    →  3 differing lines
+x86_64 vs aarch64-darwin   →  3 differing lines
 ```
 
-Rosetta 2 does not expose AVX2 on this host, so libcrux's multiplexing dispatcher fell back to the
-**portable** backend. The `simd256` feature that
-[`crates/hux-crypto/Cargo.toml`](../../crates/hux-crypto/Cargo.toml) enables for
-`cfg(target_arch = "x86_64")` was compiled but never executed.
+All three differences are the architecture name the program prints about itself
+(`All Layer-0 cryptographic invariants held on x86_64` vs `aarch64`), plus a log header. **Every
+derived value is byte-identical**: the five HD purpose seeds (`755c2dcb…`, `3c4e962a…`,
+`a77709ef…`, `6310e5e7…`, `2c9cd7fd…`), the `PeerId`s, the shared secrets.
 
-So the run establishes that the x86-64 target *compiles and passes with portable dispatch*. It
-establishes nothing about the AVX2 path — which is the exact code path whose absence on aarch64
-caused the original G0 break. **Native x86-64 hardware remains unproven**, and only the CI matrix
-can prove it.
+That is the substantive claim behind G0-T1 — the simd256, simd128 and portable backends are
+output-identical in practice, so a backend difference cannot fork the network.
+
+> **Why the earlier local x86-64 run did not establish this.** The audit first ran the suite
+> against the `x86_64-apple-darwin` target on an Apple M4 — 115 tests, all passing. But probing
+> that translated environment directly gave `avx2 = false`, `avx = false`, `sse4.2 = true`:
+> Rosetta 2 exposes no AVX2, so libcrux dispatched to the **portable** backend and the `simd256`
+> feature was compiled but never executed. It proved the target compiles, nothing more. Only
+> native x86-64 hardware could settle it, and only CI had that.
+
+### 3.3 G0-8 — the negative case
+
+A matrix that can only pass does not prove it would catch the regression it exists for. Two
+checks now close that gap, both added on top of the merge:
+
+| Script | Proves | Result |
+|---|---|---|
+| [`check-arch-portability.sh`](../../scripts/check-arch-portability.sh) | nobody **wrote** a direct backend path — scans `crates/*/src` and `crates/*/tests` for `::avx2::`, `::neon::`, `::simd256::`, `::simd128::`, `::portable::`, exempting whole-line comments and the target-gated features in `Cargo.toml` | ✓ 24 files, clean; verified to **fail** when a violation is injected |
+| [`check-arch-negative.sh`](../../scripts/check-arch-negative.sh) | the build would **notice** if they did — stages a throwaway copy of the working tree, injects `mlkem768::avx2::generate_key_pair`, and asserts the compiler rejects it | ✓ `error[E0433]: failed to resolve: could not find 'avx2' in 'mlkem768'` on aarch64 |
+
+The negative check skips itself on x86-64, where the backend genuinely exists and rejecting it
+would prove nothing, and it requires the failure to actually mention `avx2`/`E0433` — otherwise an
+unrelated compile error would be misread as success.
 
 ### 3.3 G0 item-by-item
 
@@ -123,7 +144,7 @@ can prove it.
 | 2 · Four phantom modules | ✅ | ✅ | `slh_dsa`/`lb_vrf`/`pq_ssle`/`zk_stark` are `#[cfg(test)]` in `lib.rs`; unreachable from the public API |
 | 3 · `E0121` placeholder | ✅ | ✅ | compiles clean |
 | 4 · Split the 3,607-line module | ✅ | ✅ | `hux-crypto/src/lib.rs` is 36 lines; suites in `crates/*/tests/` |
-| 5 · **CI on both architectures** | 🟦 configured | ❌ **never ran** | §3.1 |
+| 5 · **CI on both architectures** | 🟦 configured | ✅ **green on three** | Was never able to run; fixed by PR #9. §3.1 |
 | 6 · `pub mod` + `forbid(unsafe_code)` | ✅ | ✅ | workspace lint, 0 warnings |
 | 7 · `PeerId` short-read | ✅ | ✅ | `XofReader::read` in `peer.rs`, with the reasoning in a comment |
 | 8 · Workspace split | ✅ | ✅ | two crates, downward-only layering, gate script passes |
@@ -132,13 +153,18 @@ can prove it.
 
 | Gate test | Status | Evidence |
 |---|---|---|
-| **G0-T1** — compiles and passes on x86-64 **and** aarch64 | 🟦 **open** | aarch64 native ✅ · x86-64 only under Rosetta with portable dispatch (§3.2) · CI matrix never ran (§3.1) |
-| **G0-T1 negative case** — a deliberate `avx2::` call must *fail* the aarch64 job | ❌ **not written** | No such test or CI step exists. A matrix that can only pass does not prove it would catch the regression it was built for |
-| **G0-T2** — reproducible builds | ✅ **green** | Byte-identical `.rlib`s, re-verified today. Baseline is pure-Rust; must be re-run when `aws-lc-rs` lands |
+| **G0-T1** — compiles and passes on x86-64 **and** aarch64 | ✅ **green** | CI matrix: `x86_64`, `aarch64`, `arm64`, each 115 · 0 · 81, with byte-identical derived values (§3.1, §3.2) |
+| **G0-T1 negative case** — a deliberate `avx2::` call must *fail* the aarch64 job | ✅ **green** | `check-arch-negative.sh` — injected call rejected with `E0433`; paired with the static guard (§3.3) |
+| **G0-T2** — reproducible builds | ✅ **green** | Byte-identical `.rlib`s locally and on a runner. Baseline is pure-Rust; **must be re-run when `aws-lc-rs` lands at G5** |
 | **G0-T3** — every ignore names its gate | ✅ **green** | 81/81 |
 
-**G0 is one PR and one negative test away from closing.** Nothing about it is hard; it is simply
-not done.
+**G0 is closed.** The one criterion that remains deliberately deferred is G0-7, the C-toolchain
+pin, which belongs to G5 because `aws-lc-rs` is not in the tree yet — see
+[`01-outstanding-work.md` Phase C](01-outstanding-work.md).
+
+> What closing G0 actually buys: from here, no change merges unless three architectures agree,
+> the build is reproducible, the layering holds, no direct backend path was written, and a
+> deliberate regression would be caught. **G1 may begin.**
 
 ---
 
@@ -279,21 +305,25 @@ An honest completion report should not be only a list of absences. Verified toda
 - **The documentation does not overclaim.** The executive summary, the verification README and
   `verify-layer0.sh` itself all say Layer 0 is incomplete, unprompted. The script prints it on a
   fully green run. That is rare and worth preserving.
+- **The backends genuinely agree.** Three architectures, byte-identical derived values (§3.2).
+  This was the project's central portability *claim*, and it is now a measurement.
 
-The gap this report documents is between **built** and **proven**, and between **primitives** and
-**Layer 0**. It is not a gap between what the docs claim and what exists.
+The gap this report documented was between **built** and **proven**, and between **primitives**
+and **Layer 0**. The first half is closed. The second half is G1 and G5.
 
 ---
 
 ## 8. Conclusion
 
-> Layer 0 for v1 is **not complete**. G0 is near-closed and blocked on CI that has never run; G1
-> and G5 have not started. What exists — verified green today on one architecture — is the
-> **post-quantum primitive layer**, not the Layer-0 substrate.
+> Layer 0 for v1 is **not complete**. **G0 is closed** — verified green on three architectures,
+> with a negative case proving the guard works. **G1 and G5 have not started.** What exists is
+> the **post-quantum primitive layer** with a working safety net under it, not the Layer-0
+> substrate.
 
-The next action is small and disproportionately valuable: **open a pull request for
-`layer0/g0-workspace-and-verification`** so the architecture matrix, the layering gate, the
-reproducible-build job and cargo-deny execute for the first time against the workspace. Then add
-the G0-T1 negative case. Then G0 closes, and G1 may begin.
+One of three gates. The next action is **G1**, and its first task is the registry — not
+SLH-DSA, however much more satisfying a primitive is to write. A primitive built before the
+registry gets called directly from somewhere, and that call site survives. Note also that G1
+carries a closing window: G2 freezes canonical encoding, after which the `(role, version)`
+descriptor's shape is a state migration rather than a parameter change.
 
 Everything remaining is enumerated in [`01-outstanding-work.md`](01-outstanding-work.md).

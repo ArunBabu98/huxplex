@@ -1,8 +1,10 @@
 # 01 — Outstanding work: what must be completed and tested
 
-> **As of 2026-09-23, commit `63ad3d5`.** Derived from the audit in
+> **As of 2026-09-23, after `7912117` (PR #9) and G0-8.** Derived from the audit in
 > [`00-layer0-v1-completion-report.md`](00-layer0-v1-completion-report.md). This is the *complete*
 > remaining path to "Layer 0 for v1 is done", in the order it should be done.
+>
+> **Phase A is complete — G0 is closed.** Start at Phase B.
 >
 > Nothing here is new scope. Every item traces to
 > [`16-action-plan.md`](../16-action-plan.md), [`18-implementation-plan/`](../18-implementation-plan/)
@@ -11,81 +13,68 @@
 
 ---
 
-## Phase A — close G0 · *days, not weeks*
+## Phase A — close G0 ✅ *complete, 2026-09-23*
 
-> Everything G0 was written to fix is fixed. What is missing is proof. These are the two items
-> standing between the repository and a closed gate, plus the doc corrections that fell out of the
-> audit.
+> Everything G0 was written to fix was fixed; what was missing was proof. Both halves now exist.
+> Kept here as the record of what was done and how it was verified.
 
-### A1 · Make CI actually run **(new — found 2026-09-23)** 🔴 blocking
+### A1 · Make CI actually run ✅ *done*
 
-**Finding.** `.github/workflows/ci.yml` triggers only on `push: branches: [master]` and
-`pull_request`. All Layer-0 work lives on `layer0/g0-workspace-and-verification`, which is pushed
-but has no PR — so CI has **never executed** against the workspace. `gh run list --branch
-layer0/g0-workspace-and-verification` is empty; the newest `CI` run of any kind is 2026-09-12,
-before the workspace existed.
+**Finding.** `.github/workflows/ci.yml` triggered only on `push: branches: [master]` and
+`pull_request`. All Layer-0 work lived on `layer0/g0-workspace-and-verification`, pushed but with
+no PR — so CI had **never executed** against the workspace. The newest `CI` run of any kind was
+2026-09-12, before the workspace existed. The matrix, the layering gate, the reproducible-build
+job and cargo-deny were configuration, not results.
 
-Until this is fixed, the architecture matrix, the layering gate, the reproducible-build job and
-cargo-deny are configuration, not results — and standing rule #1 of the action plan says a gate is
-done when its tests pass *in CI*.
+- [x] Opened [PR #9](https://github.com/ArunBabu98/huxplex/pull/9), merged as `7912117`. Fired
+      `CI` and `Security` for the first time. **8/8 jobs green.**
+- [x] Confirmed each leg's true architecture from its `uname -m` output, not the tick:
+      `x86_64`, `aarch64`, `arm64`.
+- [x] `Security` (cargo-deny) green against the workspace lockfile.
 
-**Do:**
+> Note for future long-running branches: the `push` trigger still covers only `master`. A PR is
+> what fires CI. Widening it to `branches: [master, 'layer0/**']` would give branch feedback
+> without one — not required, since the PR route works, but cheap.
 
-- [ ] Open a pull request for `layer0/g0-workspace-and-verification` → `master`. This alone fires
-      both `CI` and `Security` for the first time.
-- [ ] *Or, in addition:* widen the `push` trigger to cover the working branches, e.g.
-      `branches: [master, 'layer0/**']`, so long-running Layer-0 branches get feedback without a PR.
-- [ ] Confirm all three matrix legs report their true architecture — the workflow already runs
-      `uname -m && rustc -vV`; read the output rather than the green tick.
-- [ ] Confirm the `Security` (cargo-deny) job passes against the **workspace** lockfile. It passes
-      locally today, but CI has only ever checked the pre-workspace tree.
-
-**Acceptance:** a CI run exists for the branch, and every job on it is green on
-`ubuntu-latest` (x86_64), `ubuntu-24.04-arm` (aarch64) and `macos-latest` (aarch64-darwin).
-
-### A2 · Write the G0-T1 negative case 🔴 blocking
+### A2 · Write the G0-T1 negative case ✅ *done — G0-8*
 
 **Why.** *A matrix that can only pass does not prove it would catch the regression it was built
-for.* The original G0 break was an unconditional `mlkem768::avx2::*` call — x86-64 only. Nothing
-currently prevents a recurrence except a CI job that has never failed.
+for.* Both halves landed, because neither replaces the other:
 
-**Do:**
+- [x] [`scripts/check-arch-portability.sh`](../../scripts/check-arch-portability.sh) — static
+      guard over `crates/*/src` and `crates/*/tests` for `::avx2::`, `::neon::`, `::simd256::`,
+      `::simd128::`, `::portable::`. Whole-line comments exempt (so `kem.rs` can explain the rule
+      by naming it); `Cargo.toml` exempt (target-gated features are the *correct* way to select a
+      backend). Runs in the `static gates` CI job. **Verified to fail on an injected violation.**
+- [x] [`scripts/check-arch-negative.sh`](../../scripts/check-arch-negative.sh) — stages a
+      throwaway copy of the working tree, injects `mlkem768::avx2::generate_key_pair`, and asserts
+      the compiler rejects it. Skips on x86-64, where the backend exists and rejecting it would
+      prove nothing. Requires the failure to mention `avx2`/`E0433`, so an unrelated compile error
+      cannot be misread as success. Result: `error[E0433]: failed to resolve: could not find
+      'avx2' in 'mlkem768'`.
 
-- [ ] Add a deliberate-regression check: a job step (or a short script under `scripts/`) that
-      introduces an `avx2::`-style architecture-specific call and asserts the **aarch64** leg
-      fails to compile, then restores the tree. Keep it self-contained — a fixture crate or a
-      `sed`-and-revert step, not a committed broken file.
-- [ ] Alternatively, or additionally, enforce the standing rule statically: a CI grep forbidding
-      `::avx2::`, `::neon::`, `::simd256::` and `::simd128::` outside a manifest, which is cheaper
-      to maintain and fails with a clear message. Prefer this *as well as* the negative case, not
-      instead of it — the grep proves nobody wrote the call; the negative case proves the matrix
-      would notice if they did.
+**Acceptance met:** matrix green on three architectures, **and** a deliberate architecture-specific
+call fails on aarch64.
 
-**Acceptance (G0-T1, full):** `cargo test --all-targets --all-features --locked` green on both
-architectures in CI, **and** a deliberate architecture-specific call fails the aarch64 job.
+### A3 · Align the test invocations ✅ *done*
 
-### A3 · Align the test invocations with the stated acceptance criterion **(new — found 2026-09-23)**
+The acceptance wording said `--all-targets`; CI and `verify-layer0.sh` ran `--all-features`.
+Neither combined them, and `--all-targets` excludes doctests.
 
-The G0-T1 acceptance wording is `cargo test --all-targets --locked`. CI and
-`scripts/verify-layer0.sh` both run `cargo test --all-features --locked`. Neither combines the
-two, and `--all-targets` notably *excludes* doctests.
-
-- [ ] Settle on one invocation — `cargo test --all-targets --all-features --locked`, plus a
-      separate `cargo test --doc` if doctests are wanted — and use it identically in
-      `verify-layer0.sh`, `ci.yml`, and the acceptance wording in
+- [x] One invocation everywhere: `cargo test --all-targets --all-features --locked`, plus an
+      explicit `cargo test --doc --all-features --locked`. Applied in `ci.yml`,
+      `scripts/verify-layer0.sh`, and the acceptance wording in
       [`18-implementation-plan/01-g0-repository-health.md`](../18-implementation-plan/01-g0-repository-health.md).
+      *(There are no doctests today — the `--doc` run guards the case where someone adds one.)*
 
-### A4 · Re-verify the things that are already green, in CI
+### A4 · Re-verify the already-green things in CI ✅ *done*
 
-These pass locally and are expected to pass remotely; they have simply never been confirmed off
-this machine.
-
-- [ ] **G0-T2** reproducible build — the `reproducible` job runs `scripts/check-reproducible.sh`.
-      Confirm the canonical path `/tmp/hux-reproducible-build` works on the GitHub runner.
-- [ ] **Layering** — `scripts/check-layering.sh` in the `layering` job.
-- [ ] **Walkthroughs** — both `--example` runs, on all three matrix legs. Compare the printed key,
-      `PeerId` and shared-secret values **across architectures**; they are seed-deterministic, so
-      any difference is a fork-class bug.
+- [x] **G0-T2** reproducible build — green on the runner; `/tmp/hux-reproducible-build` works there.
+- [x] **Layering** — green in the `static gates` job.
+- [x] **Walkthroughs** — run on all three legs, and their output **diffed across architectures**.
+      Only the architecture name each program prints differs; every derived value (HD purpose
+      seeds, `PeerId`s, shared secrets) is byte-identical. This is the cross-architecture check
+      [`19-verification/README.md`](../19-verification/README.md) asks contributors to perform.
 
 ### A5 · Correct the stale figures in the documentation ✅ *done as part of this audit*
 
@@ -102,17 +91,19 @@ not `112 / 0 / 84`. Commit `63ad3d5` un-ignored three size-constant assertions. 
 > means five edits. Consider having `verify-layer0.sh` print the counts and referencing *it* from
 > the docs rather than restating the numbers.
 
-### G0 exit checklist
+### G0 exit checklist — all met
 
 | | Criterion | Status |
 |---|---|---|
 | ✅ | Workspace migration complete | done |
 | ✅ | `PrivateKey` no longer prints secrets | done |
-| ✅ | G0-T2 — automated two-build comparison | done, re-verified 2026-09-23 |
+| ✅ | G0-T2 — automated two-build comparison | done, locally and on a runner |
 | ✅ | G0-T3 — every ignored test carries a `GATE:` label | done, 81/81 |
-| ⬜ | **G0-T1 — green on both architectures in CI** | blocked on A1 |
-| ⬜ | **G0-T1 negative case** | A2 |
-| ⏸️ | G0-7 — C-toolchain pin | correctly deferred to G5; `aws-lc-rs` is not in the tree |
+| ✅ | **G0-T1 — green on both architectures in CI** | three architectures, byte-identical derived values |
+| ✅ | **G0-T1 negative case** | G0-8, both halves |
+| ⏸️ | G0-7 — C-toolchain pin | deferred to G5 by design; `aws-lc-rs` is not in the tree |
+
+**G0 is closed. Start at Phase B.**
 
 ---
 
