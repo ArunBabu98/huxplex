@@ -26,7 +26,8 @@ them, and the path across it.
 ## 2. What actually exists today (🟢 ground truth)
 
 The repository is **not** a blockchain. It is a well-tested **post-quantum cryptography and
-networking primitive library** (~1,200 LOC of implementation + extensive tests). Concretely:
+networking primitive library, behind a working algorithm-agility registry** (~1,260 LOC of
+implementation + ~2,900 lines of tests). Concretely:
 
 | Component | Status | Detail |
 |---|---|---|
@@ -36,11 +37,17 @@ networking primitive library** (~1,200 LOC of implementation + extensive tests).
 | Domain-separated context strings | 🟢 | tx / block phases / gossip / DHT / TLS, with cross-context replay tests |
 | PeerId = SHAKE-256(pk)[..32] | 🟢 | `network/peer.rs` |
 | Signed GossipSub messages | 🟢 (struct-level) | `GossipMessage::sign/verify` |
-| Signed Kademlia DHT entries | 🟢 (struct-level) | `DhtEntry::sign/verify` |
+| Signed Kademlia DHT entries | 🟢 (struct-level) | `DhtEntry::sign/verify`, length-framed — the bare `key‖value` payload was forgeable across the field boundary and was fixed 2026-09-23 |
+| **Algorithm-agility registry** | 🟢 | `(role, suite version) → primitive`; five roles, append-only table, fail-closed on unknown identifiers. The only path to a primitive, enforced in CI (G1 · C1–C5) |
+| SLH-DSA-128s, KATs, hybrid X25519+ML-KEM | 🔴 | registered in the suite table but unimplemented (G1 · C7–C11) |
 
 That is the entire substrate. **There is no ledger, no consensus, no VM, no storage engine,
 no P2P transport, no tokens, no agents, no governance.** The networking module defines
 message *types* but no actual swarm, transport, or peer state machine.
+
+> **Where that sits against the plan**, audited continuously in [`20-completion/`](20-completion/):
+> Layer 0 is **G0 + G1 + G5**, and it is roughly **45%** done — G0 closed, G1 about half built,
+> G5 not started. T0 has been left behind; T1 has not been reached.
 
 ## 3. What is claimed but does not exist (🟡 / 🔴 the gap)
 

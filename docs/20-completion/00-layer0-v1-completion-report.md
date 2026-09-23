@@ -1,6 +1,6 @@
 # 00 — Layer 0 / v1 completion report
 
-> **Audit date:** 2026-09-23 · **Originally at:** `63ad3d5` · **Updated after:** `7912117` (PR #9 merged) and G0-8
+> **Audit date:** 2026-09-23 · **Originally at:** `63ad3d5` · **Last updated at:** `d8e3c85` (G1 C1–C5 merged)
 > **Host:** `aarch64-apple-darwin` (Apple M4), rustc 1.85.0 (pinned), plus the three CI legs
 >
 > Method: run the tree, read the source, query CI. Every ✅ and ❌ below has a command behind it.
@@ -23,7 +23,7 @@ Layer 0 is complete when **G0**, **G1** and **G5** have all closed. Measured aga
 | **G1** | Registry is the only path to a primitive; SLH-DSA green with 24 tests un-ignored; KATs byte-exact on both architectures; G1-T1 and G1-T6 green | Registry ✅ and mechanically enforced (C1–C5). Still no SLH-DSA, no KAT fixtures, no hybrid KEX. 5 of 11 tasks | 🟦 |
 | **G5** | 5 nodes mutually authenticate over QUIC with ML-DSA certificates, discover via Kademlia, gossip under 20% loss; G5-T6 and G5-T7 green | No transport, no swarm, no TLS, no peer state machine. N0 spike ✅ closed 2026-09-23 (answer: drive quinn directly); N1 blocked on an identity ADR | 🔴 |
 
-One gate closed, two untouched. **Roughly one third of Layer 0 exists.**
+One gate closed, one in progress, one blocked on a decision. **Roughly 45% of Layer 0 exists.**
 
 A second, wider reading of the question — *is v1 complete?* — resolves the same way and more
 emphatically: v1 is the 3–5 node devnet of
@@ -36,7 +36,7 @@ G3 (ledger), G4 (execution), G6 (consensus) and G7 (devnet) have no code whatsoe
 
 | Check | Command | Result |
 |---|---|---|
-| Full local harness | `./scripts/verify-layer0.sh` | **12/12 PASS** — fmt, clippy `-D warnings`, layering, arch-portability guard, build `--locked`, tests, doctests, docs, both walkthroughs, determinism re-run, arch negative case. (9/9 at audit time; G0-8 added three.) |
+| Full local harness | `./scripts/verify-layer0.sh` | **13/13 PASS** — fmt, clippy `-D warnings`, layering, arch-portability guard, primitive-encapsulation guard, build `--locked`, tests, doctests, docs, both walkthroughs, determinism re-run, arch negative case. (9/9 at audit time; G0-8 and G1·C4 added four.) |
 | Reproducible build (G0-T2) | `./scripts/check-reproducible.sh` | **PASS** — `libhux_crypto.rlib` `5e495a84…b5a0` and `libhux_network.rlib` `334fb745…2957` identical across two independent clean copies |
 | Test suite | `cargo test --all-targets --all-features --locked` | **133 passed · 0 failed · 81 ignored**. Was 115 at audit time: the DHT field-framing fix (§5.1) added two, the G1 registry suite added sixteen |
 | Gate labels (G0-T3) | `grep -rn '#\[ignore' crates/` | **81/81 labelled** — `GATE: G1` ×22, `GATE: G6+` ×33, `GATE: G10` ×26 |
@@ -168,62 +168,79 @@ pin, which belongs to G5 because `aws-lc-rs` is not in the tree yet — see
 
 ---
 
-## 4. G1 · Crypto core and the agility registry — 🔴 not started
+## 4. G1 · Crypto core and the agility registry — 🟦 5 of 11 tasks
 
-Zero of the eleven tasks C1–C11 in
-[`18-implementation-plan/02-g1-crypto-core.md`](../18-implementation-plan/02-g1-crypto-core.md)
-have been begun. The planned shape (`suite/`, `traits.rs`, `sig/`, `kem/`, `hash/`) does not exist
-on disk; `crates/hux-crypto/src/` still holds the flat pre-G1 module set.
+**C1–C5 (the registry) landed 2026-09-23** in [PR #17](https://github.com/ArunBabu98/huxplex/pull/17).
+C6–C11 are open. The registry was built before the primitives deliberately: a primitive written
+first gets called directly from somewhere, and that call site survives.
 
-### 4.1 What the source actually shows
+### 4.1 What exists now
 
-**There is no registry, and no role dimension in code.**
-[`signaturescheme.rs`](../../crates/hux-crypto/src/signaturescheme.rs) is four lines with a single
-variant:
-
-```rust
-pub enum SignatureSchemeId { Dilithium2 }
+```
+crates/hux-crypto/src/
+├── suite/{mod,ids,registry}.rs   # SigRole, SuiteVersion, AlgoSuite, SuiteError; the v1 table
+├── traits.rs                      # Verifier, Signer, SignatureScheme; implementation()
+├── sig/ml_dsa.rs                  # the only file permitted to name libcrux_ml_dsa
+└── kem/ml_kem.rs                  # the only file permitted to name libcrux_ml_kem
 ```
 
-Dispatch is a `match` inlined at each call site in `signature.rs` and `publickey.rs`. There is no
-`AlgoSuite`, no `SigRole`, no `(role, version) → primitive` resolution, no append-only table, and
-no trait boundary — so **every primitive is reached by a direct call to a named scheme**, which is
-the precise condition C4 exists to forbid.
+- **Resolution is `(role, suite version) → primitive`.** `SigRole` carries all five roles with
+  discriminants **asserted equal to `KeyPurpose` in a `const` block** — a test can be deleted, a
+  const assertion stops the crate compiling. The append-only table matches crypto spec §1.1 row
+  for row.
+- **Fail-closed throughout.** Unknown role, unknown version and unknown scheme each return a
+  *distinct* error, and **zero is never a valid identifier** for any of the three, so a zeroed or
+  default-constructed descriptor field cannot be read as v1.
+- **"Registered but unimplemented" is its own state.** Suite v1 resolves `Identity` and
+  `Governance` to SLH-DSA-128s, absent until C7. `SchemeUnimplemented` ≠ `UnknownPair`, and
+  neither ever falls back to a working scheme.
+- **C4 is enforced mechanically**, not by convention:
+  [`check-primitive-encapsulation.sh`](../../scripts/check-primitive-encapsulation.sh) fails if
+  any source names a vendor crate outside its one designated module. In CI and
+  `verify-layer0.sh`, and verified to fail on an injected violation.
+- **`Signer` and `Verifier` are separate traits.** A verify-only handle cannot sign, which is
+  what rule V5 (*old pairs stay verifiable forever*) actually needs from a light client or an
+  archival verifier.
 
-`KeyPurpose` in [`bip32.rs`](../../crates/hux-crypto/src/bip32.rs) *does* carry the five roles with
-the ADR-0018 discriminants. That is the derivation half only. Nothing yet enforces that a key of
-purpose *n* may sign only under role *n*, because there is no verifier that knows what a role is.
+Conformance: `crates/hux-crypto/tests/suite_registry.rs`, **16 tests**.
 
-**Sizes are hard-coded**, exactly as ADR-0002 warned (C6):
-`[u8; 1312]` and `[u8; 2420]` in `publickey.rs`, `[u8; 2560]` in `signature.rs`.
+### 4.2 What is still missing
+
+**Sizes are still hard-coded** (C6). `traits::SchemeSizes` exposes them from the descriptor and
+the registry suite asserts it, but `sig/ml_dsa.rs` still carries the literals and no second scheme
+has yet proved a registration needs no size edit.
 
 **SLH-DSA-128s is unimplemented** (C7/C8). `src/slh_dsa.rs` is a `#[cfg(test)]` API contract with
-`unimplemented!()` bodies; 22 of its tests are `#[ignore]`d under `GATE: G1`. `fips205` is not a
+`unimplemented!()` bodies; 22 tests are `#[ignore]`d under `GATE: G1`. `fips205` is not a
 dependency, nor is RustCrypto `slh-dsa` as the differential oracle.
 
-**No KAT fixtures exist anywhere in the tree** (C10). There is no fixtures directory and no
-committed vectors; `grep -rn "KAT" crates/*/tests/` returns nothing. G1-T3 therefore cannot be
-attempted yet.
+**No KAT fixtures exist anywhere in the tree** (C10). No fixtures directory, no committed vectors.
 
 **C9 blocks C10.** `Keypair::sign` draws its 32 bytes from `rand::rng()` unconditionally and
 exposes no test-only entry point taking explicit randomness. Until the two-function split lands,
-*signature* KATs cannot be pinned at all — only keygen vectors could be.
+*signature* KATs cannot be pinned at all — only keygen vectors could be. C10 in turn gates the
+digest-stack upgrade in [issue #12](https://github.com/ArunBabu98/huxplex/issues/12).
 
-**No hybrid X25519 + ML-KEM-768 key agreement** exists (G1-T5), and no
-`libcrux` ↔ `aws-lc-rs` differential test (C11).
+**No hybrid X25519 + ML-KEM-768 key agreement** (G1-T5), and no `libcrux` ↔ `aws-lc-rs`
+differential test (C11).
 
-### 4.2 Gate-test coverage today
+### 4.3 Gate-test coverage today
 
 | Test | Status |
 |---|---|
-| **G1-T1** — algorithm rotation without state migration | ❌ impossible to write; nothing to rotate |
-| **G1-T2** — cross-context replay fails | 🟡 **partial** — `test_all_canonical_context_strings_are_mutually_domain_separated`, `test_mainnet_and_testnet_tx_contexts_are_domain_separated`, `test_dht_entry_cross_network_replay_fails` exist and pass. Not the exhaustive ordered-pair sweep over a registry, because there is no registry |
-| **G1-T3** — KAT byte-exactness | ❌ no fixtures |
-| **G1-T4** — unknown algorithm ID fails closed | ❌ unrepresentable: the enum has one variant, so an unknown ID cannot be constructed |
+| **G1-T1** — rotation without state migration | 🟡 **half** — the descriptor half is proven (`g1_t1_descriptor_shape_supports_per_role_rotation`): resolution is per-`(role, version)`, and suite v1 *already* resolves `Identity` to a different primitive than the hot roles, so the table is genuinely per-role rather than one global default wearing a role label. Rotation needs a second **implemented** scheme → completes at C7 |
+| **G1-T2** — cross-context replay fails | 🟡 **partial** — three passing tests cover topic, network and DHT contexts. The exhaustive ordered-pair sweep over the *context* registry is still to do; the role sweep is done |
+| **G1-T3** — KAT byte-exactness | ❌ no fixtures (C10, blocked on C9) |
+| **G1-T4** — unknown algorithm ID fails closed | 🟢 **green** — five tests: unknown role, unknown version, unknown scheme, zero-is-never-valid, consistent resolution across every registered pair |
 | **G1-T5** — hybrid retains PQ security | ❌ no hybrid |
-| **G1-T6** — role confusion rejected | ❌ no roles in the verifier |
+| **G1-T6** — role confusion rejected | 🟡 **structural half** — every ordered pair of roles proven pairwise distinct in discriminant and key purpose, and `RoleMismatch` names both roles. Binding a *signature* to its role needs the descriptor carried on the signed object → G2's encoding work |
 
-One of six partially covered. **G1 has not started.**
+One green, three partial, two absent.
+
+> **Two of these complete outside G1**, which is worth stating plainly rather than leaving as a
+> surprise: G1-T6's second half needs the descriptor **on the wire**, which is G2. G1 can prove
+> roles are distinct and that the verifier refuses a mismatch; it cannot prove a *signature* is
+> bound to its role until there is a canonical encoding to bind it in.
 
 > Note the ordering hazard the plan itself flags: G2 freezes canonical encoding
 > ([ADR-0011](../adr/0011-canonical-serialization.md)), so anything wrong about the
@@ -396,10 +413,11 @@ and **Layer 0**. The first half is closed. The second half is G1 and G5.
 
 ## 8. Conclusion
 
-> Layer 0 for v1 is **not complete**. **G0 is closed** — verified green on three architectures,
-> with a negative case proving the guard works. **G1 and G5 have not started.** What exists is
-> the **post-quantum primitive layer** with a working safety net under it, not the Layer-0
-> substrate.
+> Layer 0 for v1 is **not complete**. **G0 is closed** — green on three architectures, with a
+> negative case proving the guard works. **G1 is roughly half done** — the agility registry is
+> built and mechanically enforced; SLH-DSA, the KATs and the hybrid KEX are not. **G5 has not
+> started** and its first implementation task is blocked on an identity ADR. What exists is a
+> post-quantum primitive layer behind a working agility registry, not the Layer-0 substrate.
 
 One of three gates. The next action is **G1**, and its first task is the registry — not
 SLH-DSA, however much more satisfying a primitive is to write. A primitive built before the

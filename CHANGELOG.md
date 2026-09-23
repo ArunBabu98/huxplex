@@ -116,8 +116,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   case where someone adds one, since `--all-targets` excludes them.
 - `docs/20-completion/` — a dated, evidence-backed audit of where the project actually stands
   against its own gates, plus the complete list of what remains to be completed and tested.
-  Verdict as of 2026-09-23: **Layer 0 for v1 is roughly one third complete** — **G0 closed**,
-  G1 and G5 not started.
+  Verdict as of 2026-09-23: **Layer 0 for v1 is roughly 45% complete** — **G0 closed**, G1 about
+  half built (the agility registry is in; SLH-DSA, KATs and the hybrid KEX are not), G5 not
+  started and blocked on an identity ADR.
 - Four secret-hygiene tests and a `zeroize_now()` wipe API.
 - `docs/18-implementation-plan/` — how Layer 0 actually gets built: workspace migration, G0/G1/G5
   task breakdowns with per-task acceptance criteria, sequencing rules, five named risks, and

@@ -22,7 +22,7 @@ Verified by reading `src/` and running the test suite, not by reading docs.
 
 | Fact | Evidence |
 |---|---|
-| ~1,200 lines of implementation across `crates/hux-crypto/src/` and `crates/hux-network/src/` | `wc -l crates/*/src/*.rs` |
+| ~1,260 lines of implementation across `crates/hux-crypto/src/` and `crates/hux-network/src/`, plus ~2,270 lines of `#[cfg(test)]` API-contract modules for unimplemented primitives | `wc -l` over `src/`, excluding `lb_vrf`/`pq_ssle`/`slh_dsa`/`zk_stark` |
 | ~4,800 lines of **tests** across `crates/*/tests/` and co-located gated suites | `wc -l crates/*/tests/*.rs` |
 | **Build is green** — **133 passed, 0 failed, 81 ignored** on **three architectures**; reproducible release builds verified | `./scripts/verify-layer0.sh --full` locally (12/12), and the CI matrix on `x86_64` / `aarch64` / `arm64`. Walkthrough output is byte-identical across all three |
 | 81 ignored tests are conformance suites for four unimplemented primitives | `slh_dsa` 22 (G1), `lb_vrf` 17 + `pq_ssle` 16 (G6+), `zk_stark` 26 (G10) — each `#[ignore]` names its gate |
@@ -36,9 +36,11 @@ Verified by reading `src/` and running the test suite, not by reading docs.
 > See G0 below for what changed and what remains.
 
 > **Where the project actually stands**, audited against this plan on 2026-09-23:
-> [`20-completion/`](20-completion/). Short version — **Layer 0 is about one third complete**: G0
+> [`20-completion/`](20-completion/). Short version — **Layer 0 is roughly 45% complete**: G0
 > is **closed** (CI green on three architectures, with byte-identical derived values and a working
-> negative case), and G1 and G5 have not started. **G1 is the next gate.**
+> negative case). **G1 is in progress** — the agility registry (C1–C5) is built and mechanically
+> enforced; C6–C11 (sizes, SLH-DSA, the signing split, KATs, hybrid KEX) are open. **G5 has not
+> started**, and its N0 spike found that its first implementation task is blocked on an identity ADR.
 
 **Read this honestly:** the repository is a *spec-test-first* project. The founder has
 written extensive conformance tests ahead of the implementations — including full FIPS 205

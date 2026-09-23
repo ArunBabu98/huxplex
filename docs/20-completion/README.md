@@ -11,8 +11,8 @@
 
 ## The answer
 
-**No. Layer 0 for v1 is not complete.** It is approximately **one third** complete: one of its
-three gates is closed, and two have not been started.
+**No. Layer 0 for v1 is not complete.** It is roughly **45%** complete: one of its three gates is
+closed, one is about half built, and one has not started.
 
 | Gate | Layer-0 scope | Status | Completion |
 |---|---|---|---|
@@ -20,8 +20,19 @@ three gates is closed, and two have not been started.
 | **G1** · Crypto core + agility registry | `(role, version)` registry, SLH-DSA-128s, KATs, hybrid KEX | 🟦 **in progress** — C1–C5 done (the registry); C6–C11 open | ~45% |
 | **G5** · Transport | libp2p/QUIC, ML-DSA TLS certificates, live DHT, GossipSub | 🔴 **not started** — N0 spike ✅ closed; N1 blocked on an identity ADR | ~2% |
 
-> **G1 may now begin.** G0's whole purpose was to make the gates below it checkable, and it
-> now is: nothing merges without three architectures agreeing.
+> **What remains, in order:** G1's **C6** (sizes behind the descriptor) → **C9** (split
+> deterministic signing) → **C10** (the KATs — C9 blocks it, and it unblocks
+> [issue #12](https://github.com/ArunBabu98/huxplex/issues/12)) → **C7/C8** (SLH-DSA) → the
+> **hybrid KEX**. Then the two decisions G5 waits on, then G5 itself. Full detail with acceptance
+> criteria: [`01-outstanding-work.md`](01-outstanding-work.md).
+
+> ⚠️ **Two decisions are yours, and both block work rather than being blocked by it.**
+> 1. **The G2 ordering gap** (§5.2 of the report) — Layer 0 is defined as G0+G1+G5, but G5's entry
+>    condition is G2, which the same document marks *"NOT in this plan"*. Layer 0 as defined
+>    cannot complete without a gate its definition omits.
+> 2. **The G5 identity ADR** (§5 of the report) — libp2p types the swarm on its own `PeerId`;
+>    Huxplex's is `SHAKE-256(spki)[..32]`. Which one the swarm carries decides the shape of every
+>    G5 task. This blocks N1.
 
 The definition being measured against is
 [`18-implementation-plan/04-sequencing-and-risks.md` § *What "Layer 0 complete" means*](../18-implementation-plan/04-sequencing-and-risks.md#what-layer-0-complete-means),
