@@ -58,6 +58,11 @@ out="$(cd "$TMP" && cargo check -p hux-crypto --all-features --locked 2>&1)"
 status=$?
 set -e
 
+# CI sets CARGO_TERM_COLOR=always, which embeds ANSI escapes inside `error[E0433]:`. Strip them
+# before matching or reporting, or the evidence below prints blank on exactly the runs that
+# matter most.
+out="$(sed -E $'s/\x1b\\[[0-9;]*[a-zA-Z]//g' <<< "$out")"
+
 if [[ "$status" -eq 0 ]]; then
   echo "FAIL  the injected avx2:: call COMPILED on $ARCH."
   echo
@@ -79,6 +84,13 @@ fi
 
 echo "PASS  the injected avx2:: call was rejected by the compiler on $ARCH."
 echo
-sed -n '1,6p' <<< "$(grep -E 'error(\[E[0-9]+\])?:' <<< "$out")" | sed 's/^/      /'
+evidence="$(grep -E 'error(\[E[0-9]+\])?:' <<< "$out" | head -6)"
+if [[ -n "$evidence" ]]; then
+  sed 's/^/      /' <<< "$evidence"
+else
+  # Should not happen — the guard above already required avx2/E0433 in the output — but never
+  # print an empty evidence block, which would read as a check that proved nothing.
+  echo "      (compiler reported a failure mentioning avx2/E0433; see the full log)"
+fi
 echo
 echo "      The regression that broke every ARM build in 2026-09 would be caught here."
