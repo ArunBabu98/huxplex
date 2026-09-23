@@ -41,6 +41,32 @@ already framework-free and on-path.
   upgradable runtime module later — [protocol-upgrades](../07-governance/protocol-upgrades.md).)
 - ➖ Higher engineering burden — sharpens the solo-vs-team question (R-F2).
 
+## Amendment — 2026-09-22: the workspace split happens at G0/G1, not later
+
+✅ **Decided.** [repository-structure.md](../10-development/repository-structure.md) described the
+target workspace but left the *timing* open. The split is now scheduled as part of closing **G0**,
+immediately before the agility registry is written.
+
+**Why now.** G0 item 4 (splitting the 3,607-line `src/crypto/mod.rs`) is outstanding regardless,
+so the code is being moved either way — one disruption instead of two. More importantly,
+[ADR-0018](0018-signature-role-profiles.md)'s `(role, version)` registry *is* `hux-crypto`'s
+public surface; drawing the crate boundary while designing that surface is cheaper than moving it
+afterwards, and the downward-only dependency rule can be wired into CI once.
+
+**Scope of the split at this gate** — steps 1 and 2 of the migration plan only:
+
+```
+huxplex/
+├── Cargo.toml              # [workspace]
+└── crates/
+    ├── hux-crypto/         # ← src/crypto  (+ the agility registry, G1)
+    └── hux-network/        # ← src/network (+ the transport, G5)
+```
+
+`hux-types` and everything above it wait for G2 and later, per the existing migration plan. No
+rewrite: the move is mechanical, and the 108 passing tests are the regression harness for it.
+
 ## Links
 - [repository-structure](../10-development/repository-structure.md), [consensus](../02-architecture/consensus.md)
+- Implementation plan: [`18-implementation-plan/00-workspace-migration.md`](../18-implementation-plan/00-workspace-migration.md)
 </content>

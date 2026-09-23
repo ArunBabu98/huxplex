@@ -93,16 +93,38 @@ crypto/network crates exportable as standalone modules (v4 endgame).
 ## Migration from current → target (incremental)
 
 1. Convert the crate to a workspace; move `src/crypto` → `crates/hux-crypto`, `src/network` →
-   `crates/hux-network` (minimal churn — same code).
-2. Add `hux-types`, grow `hux-crypto` into the suite registry (agility).
-3. Add `hux-state`, `hux-vm`, `hux-consensus` per the Phase-1 plan.
+   `crates/hux-network` (minimal churn — same code). ⬅️ **scheduled at G0** (decided 2026-09-22)
+2. Grow `hux-crypto` into the suite registry (agility). ⬅️ **G1**
+3. Add `hux-types`; then `hux-state`, `hux-vm`, `hux-consensus` per the Phase-1 plan. ⬅️ **G2+**
 4. Layer economy/identity/governance in Phases 2–3.
 
 No rewrite — the existing crypto/network code is the foundation, literally crate 0.
+
+> **Timing decided 2026-09-22** ([ADR-0005](../adr/0005-build-strategy.md) amendment). Steps 1–2
+> happen *before* the agility registry is written, because the registry is `hux-crypto`'s public
+> surface and G0 item 4 already requires moving the same code. `hux-types` is deliberately **not**
+> created at this gate — it has no members until G2. Step-by-step plan:
+> [`18-implementation-plan/00-workspace-migration.md`](../18-implementation-plan/00-workspace-migration.md).
+
+## Dependency policy for third-party cryptography
+
+Recorded 2026-09-22 alongside [ADR-0019](../adr/0019-transport-authentication.md):
+
+| Primitive | Implementation | Assurance | Notes |
+|---|---|---|---|
+| ML-DSA-44, ML-KEM-768 (protocol) | **`libcrux-*`** | **Formally verified** (hax + F*: panic freedom, correctness, secret independence over field arithmetic, NTT, serialization) | Pinned `0.0.x`; not all modules are verified |
+| ML-DSA-44 (TLS transport) | **`aws-lc-rs`** via rustls | Audited, FIPS-validatable; **not** formally verified | C/assembly, BoringSSL lineage. **Non-FIPS build only** |
+| SLH-DSA-128s | **`fips205`** | Pure Rust, no `unsafe`, all 12 parameter sets | |
+| SLH-DSA-128s (CI oracle) | **`slh-dsa`** (RustCrypto) | Second vendor | Differential test only, never a runtime dependency |
+
+**Rule:** where two implementations of one primitive exist in the tree, CI MUST run a
+**differential test** between them. This is what makes [`cryptography.md`](../02-architecture/cryptography.md)
+engineering rule 4 (multi-vendor) real rather than aspirational.
 
 ---
 
 ### Open Questions
 - Single workspace vs. splitting exportable modules (causal clock, pruning, novelty) into their own repos early?
 - Where do formal specs live relative to code (in-tree `specs/` vs separate)?
+- Could a formally verified pure-Rust rustls `CryptoProvider` (libcrux-backed) eventually replace `aws-lc-rs`, removing the assurance asymmetry above? (Reversible — a provider swap is a config change, not a protocol change.)
 </content>

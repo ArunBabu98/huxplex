@@ -38,7 +38,7 @@ struct AlgoSuite {
 ### Today vs. target
 
 ```rust
-// TODAY (src/crypto/signaturescheme.rs) — the embryo of agility:
+// TODAY (crates/hux-crypto/src/signaturescheme.rs) — the embryo of agility:
 pub enum SignatureSchemeId { Dilithium2 }   // one variant
 
 // TARGET — a versioned, multi-primitive, status-bearing registry (above).

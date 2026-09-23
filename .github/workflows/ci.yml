@@ -33,21 +33,54 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: cargo clippy --all-targets --all-features -- -D warnings
 
+  layering:
+    name: crate layering (downward-only)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Enforce the dependency rule
+        # docs/10-development/repository-structure.md — a cycle is a build failure.
+        run: ./scripts/check-layering.sh
+
   test:
-    name: test (${{ matrix.os }})
+    name: test (${{ matrix.arch }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
+      # Architecture portability is a DECENTRALIZATION property, not a convenience: a PQ chain
+      # whose crypto builds on only one ISA cannot have a diverse validator set. G0 exists
+      # because an unconditional AVX2 call once broke every ARM build.
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        include:
+          - { os: ubuntu-latest,  arch: x86_64 }
+          - { os: ubuntu-24.04-arm, arch: aarch64 }
+          - { os: macos-latest,   arch: aarch64-darwin }
     steps:
       - uses: actions/checkout@v4
       - run: rustup show
       - uses: Swatinem/rust-cache@v2
+      - name: Report architecture
+        run: uname -m && rustc -vV
       - name: Build
-        run: cargo build --all-targets --verbose
+        run: cargo build --all-targets --locked --verbose
       - name: Test
-        run: cargo test --all-features --verbose
+        run: cargo test --all-features --locked --verbose
+      - name: Self-verifying walkthroughs
+        run: |
+          cargo run -q -p hux-crypto  --example crypto_walkthrough
+          cargo run -q -p hux-network --example network_walkthrough
+
+  reproducible:
+    name: reproducible build (G0-T2)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup show
+      - uses: Swatinem/rust-cache@v2
+      - name: Two clean checkouts must produce byte-identical artifacts
+        # docs/10-development/ci-cd.md § The recipe. A binary nobody can independently
+        # reproduce is a binary everyone has to take on trust.
+        run: ./scripts/check-reproducible.sh
 
   docs:
     name: doc build

@@ -197,6 +197,31 @@ blocking constraint for on-chain PQ — which is exactly risk #2 in the executiv
 **G3-T4 (pruning preserves the root) is the project's answer, and it is validated as the
 right thing to test early.**
 
+### What other chains actually shipped
+
+Huxplex's L0 primitives are **contemporary with, not behind, production chains** — which, given
+§*Behind* below, is worth saying out loud: **L0 is the part of Huxplex that is not behind.**
+
+| Chain | Choice | Note |
+|---|---|---|
+| **BSC** | ML-DSA-44 for transaction signatures | Measured **40–50% TPS reduction**; tx 110 B → ~2.5 KB. The honest cost of Cat 1 |
+| **Sui** | **ML-DSA-65** natively; SLH-DSA-SHA2-128s in-contract for high-value vaults | Chose Cat 3 *over* the cheaper 44, citing AI-assisted attacks on lattice schemes and verification at Ed25519 parity. The hash-based path lives in Move so *"a break in lattice assumptions does not touch the hash-based path"* — the same family-diversity argument as [ADR-0002](adr/0002-cryptographic-parameter-set.md) |
+| **StarkNet** | BLAKE2 state commitments, Falcon-512 consensus signatures | Also moving away from an arithmetization-friendly hash |
+| **Ethereum** | **Dropped Poseidon** for SHA/BLAKE3 after its own cryptanalysis found issues in Poseidon2 | Vindicates [ADR-0010](adr/0010-hash-function-domains.md) |
+
+⚠️ **Signature aggregation is the gap nobody has closed.** BLS gives classical chains a 96-byte
+certificate at any committee size; no PQ scheme offers that interface. The 2026 candidates
+(Chipmunk ~20 KB @ 1,024 signers, Lemur+ ~56 KB @ 10⁶, STARK-compressed O(1)) are all
+**synchronized or stateful**, which makes this a *key-lifecycle* decision, not just a size one.
+Full treatment in [`brainstorming/01-layer0-technology-review-2026.md`](brainstorming/01-layer0-technology-review-2026.md).
+
+### Block propagation moved while nobody was looking ⚔️
+
+Erasure-coded broadcast replaced gossip for large objects during 2025–26: **ethp2p** (Reed–Solomon,
+scheduled to succeed GossipSub in **late 2026**), **RaptorCast** (Monad, rateless Raptor codes),
+**Turbine** (Solana), **Optimum P2P/Peer-Turbo** (RLNC). This matters more to Huxplex than to a
+classical chain, for the same reason everything at L0 does: 2,420-byte signatures.
+
 ### Also relevant
 
 - LLM-assisted static analysis for PQC migration auditing (arXiv 2604.00560) — a tooling

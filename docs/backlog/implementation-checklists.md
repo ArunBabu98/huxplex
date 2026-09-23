@@ -14,8 +14,11 @@ corresponding [backlog](README.md) epics. ✅ = done in current code; ⬜ = to b
 - ⬜ Sizes parameterized by suite (remove hard-coded `1312`/`2420`)
 - ⬜ `algo_suite` field on all signed objects + downgrade-resistance
 - ⬜ Zeroizing secret types; no `Debug` on secrets
-- ⬜ SLH-DSA-128s (validator identity); LB-VRF; PQ-SSLE
-- ⬜ FIPS KAT vectors in CI; constant-time/side-channel tests; multi-vendor differential
+- ⬜ SLH-DSA-128s via `fips205` (validator identity); LB-VRF/iVRF and PQ-SSLE deferred to G6
+- ⬜ FIPS KAT vectors in CI (signature fixtures pin the randomness); constant-time/side-channel tests
+- ⬜ Multi-vendor differential tests: `libcrux` ↔ `aws-lc-rs` (ML-DSA), `fips205` ↔ `slh-dsa` (SLH-DSA)
+- ⬜ Production/test signing API split — production MUST NOT accept caller-supplied randomness
+- ⬜ `SigRole` + `KeyPurpose` (🟢 purposes done); role-confusion rejection (G1-T6)
 - ⬜ Dummy-V2 migration test (agility proven)
 
 ## State (`hux-state`, `hux-types`)
@@ -46,8 +49,9 @@ corresponding [backlog](README.md) epics. ✅ = done in current code; ⬜ = to b
 
 ## Networking (`hux-network`)
 
-- ✅ GossipMessage / DhtEntry signed types + topics + contexts
-- ⬜ libp2p/QUIC transport; hybrid X25519+ML-KEM-768 handshake + ML-DSA auth
+- ✅ GossipMessage / DhtEntry signed types + topics + contexts (network-parameterized)
+- ⬜ libp2p/QUIC transport; TLS 1.3 with **native ML-DSA-44 certificates**, mutual auth,
+  ALPN `huxplex/{network}/1`, padded client Initial (ADR-0019)
 - ⬜ Running swarm, peer state machine, Kademlia discovery, peer scoring
 - ⬜ Eclipse/DDoS resistance; sentry topology; rate-limited unauthenticated gossip
 

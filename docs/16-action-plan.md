@@ -22,18 +22,23 @@ Verified by reading `src/` and running the test suite, not by reading docs.
 
 | Fact | Evidence |
 |---|---|
-| ~1,150 lines of implementation across `src/crypto/` and `src/network/` | `wc -l src/**/*.rs` minus test blocks |
-| ~4,260 lines of **tests**, 189 `#[test]` functions | `src/crypto/mod.rs`, `src/network/mod.rs` |
-| **Build is green on both architectures** — 105 passed, 0 failed, 84 ignored | `cargo test` on `aarch64-apple-darwin`; `cargo check --target x86_64-apple-darwin` |
-| 84 ignored tests are conformance suites for four unimplemented primitives | `slh_dsa` (G1), `lb_vrf` / `pq_ssle` (G6+), `zk_stark` (G10) — each `#[ignore]` names its gate |
-| No ledger, no consensus, no VM, no storage, no transport, no tokens, no agents | absence across `src/` |
+| ~1,200 lines of implementation across `crates/hux-crypto/src/` and `crates/hux-network/src/` | `wc -l crates/*/src/*.rs` |
+| ~4,800 lines of **tests** across `crates/*/tests/` and co-located gated suites | `wc -l crates/*/tests/*.rs` |
+| **Build is green** — **115 passed, 0 failed, 81 ignored**; reproducible release builds verified | `./scripts/verify-layer0.sh --full` on `aarch64-apple-darwin`, re-verified 2026-09-23 at `63ad3d5`. Dual-architecture CI is wired but **has never run** — see G0 item 5 |
+| 81 ignored tests are conformance suites for four unimplemented primitives | `slh_dsa` 22 (G1), `lb_vrf` 17 + `pq_ssle` 16 (G6+), `zk_stark` 26 (G10) — each `#[ignore]` names its gate |
+| No ledger, no consensus, no VM, no storage, no transport, no tokens, no agents | absence across `crates/` |
 | Connectors are now specified but unbuilt | [07-connector-protocol](15-specifications/07-connector-protocol.md), [ADR-0015](adr/0015-connector-architecture.md), [ADR-0016](adr/0016-evidence-and-attestation.md) |
 
 > **G0 was completed on 2026-09-12.** Previously `cargo test` did not compile at all
 > (3 × `E0433`, 5 × `E0432`, 1 × `E0121`), so none of the authored tests protected anything.
-> The root cause of the architecture failure was `mlkem768::avx2::*` hardcoded at
-> `src/crypto/kem.rs:13,20,27` — AVX2 is x86-64 only and does not exist on `aarch64`.
+> The root cause of the architecture failure was `mlkem768::avx2::*` hardcoded in
+> what is now `crates/hux-crypto/src/kem.rs` — AVX2 is x86-64 only and does not exist on `aarch64`.
 > See G0 below for what changed and what remains.
+
+> **Where the project actually stands**, audited against this plan on 2026-09-23:
+> [`20-completion/`](20-completion/). Short version — **Layer 0 is about one third complete**: G0
+> is near-closed but blocked on CI that has never executed against the workspace, and G1 and G5
+> have not started.
 
 **Read this honestly:** the repository is a *spec-test-first* project. The founder has
 written extensive conformance tests ahead of the implementations — including full FIPS 205
@@ -105,7 +110,7 @@ G0 → G1 → G2 → G3 → G4 → G6 → G7      (the binding sequence)
 
 # Part I — The v1 critical path
 
-## G0 · Repository health — 🟢 mostly complete (2026-09-12)
+## G0 · Repository health — 🟦 near-closed, **not closed** (audited 2026-09-23)
 
 > **The gate nobody wants to write and everybody needs.** Before this gate `cargo test` did
 > not compile, which meant *none* of the authored tests protected anything.
@@ -116,26 +121,34 @@ G0 → G1 → G2 → G3 → G4 → G6 → G7      (the binding sequence)
 
 | # | Item | Status |
 |---|---|---|
-| 1 | **ML-KEM backend selection.** `src/crypto/kem.rs` called `mlkem768::avx2::*` unconditionally — AVX2 is x86-64 only and does not exist on `aarch64` | ✅ Switched to libcrux's top-level *multiplexing* entry points, which detect CPU capability at runtime and fall back to portable. `Cargo.toml` now enables `simd256` on x86-64 and `simd128` (NEON) on aarch64, so both architectures get a fast backend. All backends are output-identical, so no test vector changed |
-| 2 | **Four phantom modules.** `slh_dsa`, `lb_vrf`, `pq_ssle`, `zk_stark` were imported by tests but declared only in a comment | ✅ Created as `#[cfg(test)]` API-contract modules with `unimplemented!()` bodies, so the suites type-check against a fixed signature while **no unimplemented cryptography is reachable from the public API**. Their 84 tests are `#[ignore]`d with gate labels. No test was deleted |
+| 1 | **ML-KEM backend selection.** `crates/hux-crypto/src/kem.rs` called `mlkem768::avx2::*` unconditionally — AVX2 is x86-64 only and does not exist on `aarch64` | ✅ Switched to libcrux's top-level *multiplexing* entry points, which detect CPU capability at runtime and fall back to portable. `Cargo.toml` now enables `simd256` on x86-64 and `simd128` (NEON) on aarch64, so both architectures get a fast backend. All backends are output-identical, so no test vector changed |
+| 2 | **Four phantom modules.** `slh_dsa`, `lb_vrf`, `pq_ssle`, `zk_stark` were imported by tests but declared only in a comment | ✅ Created as `#[cfg(test)]` API-contract modules with `unimplemented!()` bodies, so the suites type-check against a fixed signature while **no unimplemented cryptography is reachable from the public API**. Their tests are `#[ignore]`d with gate labels — 81 as of `63ad3d5`, after three vacuously-gated size assertions were un-ignored. No test was deleted |
 | 3 | `E0121` — placeholder `_` in a return type | ✅ `make_validator_set` now returns `Vec<(SslePublicKey, SsleSecretKey)>` |
-| 4 | Split `src/crypto/mod.rs` (3,607 lines) into `tests/` | ⬜ **Outstanding** — implementation and conformance suite still share a file |
-| 5 | CI on both `x86_64` and `aarch64` | ⬜ **Outstanding** — verified locally, not yet wired into `.github/workflows/ci.yml` |
-| 6 | *(added)* `src/lib.rs` declared modules privately, making the whole library dead code | ✅ Now `pub mod`, with `#![forbid(unsafe_code)]` enforcing Principle #8. Warnings went 24 → 0 |
+| 4 | Split the 3,607-line crypto module into `tests/` | ✅ Done via the workspace migration — `lib.rs` is now 36 lines; suites live in `crates/*/tests/` |
+| 5 | CI on both `x86_64` and `aarch64` | 🔴 Matrix wired (`ubuntu-latest`, `ubuntu-24.04-arm`, `macos-latest`) but **structurally unable to run**: `ci.yml` triggers only on `push: [master]` and `pull_request`, and the Layer-0 branch has no PR. Zero CI runs exist for it; the newest run of any kind predates the workspace. See [`20-completion/01-outstanding-work.md` §A1](20-completion/01-outstanding-work.md) |
+| 6 | *(added)* the crate root declared modules privately, making the whole library dead code | ✅ Now `pub mod`, with `#![forbid(unsafe_code)]` enforcing Principle #8. Warnings went 24 → 0 |
 | 7 | *(added)* `PeerId::from_ml_dsa_pk` used `std::io::Read::read`, whose short reads would silently zero-pad a peer identity | ✅ Now uses `XofReader::read`, which always fills the buffer. PeerId values unchanged (tests confirm) |
+| 8 | *(added 2026-09-22)* **Workspace split** — single crate → `crates/hux-crypto`, `crates/hux-network` ([ADR-0005](adr/0005-build-strategy.md) amendment) | ✅ Done — 112 tests unchanged at the time of the move (115 today), layering gate added to CI though **not yet executed there** |
+| 9 | *(added 2026-09-22)* **`PrivateKey` derives `Debug`** — prints 2,560 B of secret key to any log or panic message | ✅ Fixed — redacted `Debug`, `ZeroizeOnDrop`, constant-time `Eq`, private bytes behind `expose_secret()` |
+| 10 | *(added 2026-09-22)* **Pin the C toolchain** — `aws-lc-rs` compiles C/asm, so `rust-toolchain.toml` no longer determines output bytes ([ADR-0019](adr/0019-transport-authentication.md) condition 3) | ⏸️ Deferred to **G5** — `aws-lc-rs` is not in the tree yet; the G0-T2 baseline is established without it |
 
 ### 🎯 High-concept tests
 
 | ID | Property | Status |
 |---|---|---|
-| **G0-T1** | `cargo test --all-targets` compiles and passes on x86-64 **and** aarch64 | 🟢 **105 passed, 0 failed, 84 ignored** on `aarch64-apple-darwin`; `cargo check` green on `x86_64-apple-darwin`. Not yet enforced in CI (item 5) |
-| **G0-T2** | `cargo build --release` produces bit-identical artifacts across two clean checkouts | ⬜ Not yet established |
-| **G0-T3** | Every `#[ignore]`d test names the gate that will un-ignore it | 🟢 All 84 carry `GATE: G1 / G6+ / G10` in the ignore reason |
+| **G0-T1** | `cargo test --all-targets` compiles and passes on x86-64 **and** aarch64 | 🟦 **open.** **115 passed, 0 failed, 81 ignored** natively on `aarch64-apple-darwin`. The suite also passes for `--target x86_64-apple-darwin`, but that ran under Rosetta 2, which reports no AVX/AVX2 — so libcrux dispatched to the **portable** backend and the `simd256` path was never executed. **Native x86-64 is unproven**, and CI has never run (item 5) |
+| **G0-T1 (negative)** | A deliberate architecture-specific call (`mlkem768::avx2::*`) must **fail** the aarch64 job | ⬜ **not written.** A matrix that can only pass does not prove it would catch the regression it exists for |
+| **G0-T2** | `cargo build --release` produces bit-identical artifacts across two clean checkouts | 🟢 **Established** — `scripts/check-reproducible.sh`, in CI and in `verify-layer0.sh --full`. Recipe: pinned toolchain + `--locked` + `SOURCE_DATE_EPOCH` + `--remap-path-prefix` + a **canonical build path** ([ci-cd.md](10-development/ci-cd.md)) |
+| **G0-T3** | Every `#[ignore]`d test names the gate that will un-ignore it | 🟢 All 81 carry `GATE: G1 / G6+ / G10` in the ignore reason |
 
-**Ignored-test inventory:** `slh_dsa_128s_tests` 24 (G1) · `lb_vrf_tests` 17 (G6+) ·
-`pq_ssle_tests` 16 (G6+) · `zk_stark_tests` 27 (G10).
+**Ignored-test inventory:** `slh_dsa_128s_tests` 22 (G1) · `lb_vrf_tests` 17 (G6+) ·
+`pq_ssle_tests` 16 (G6+) · `zk_stark_tests` 26 (G10).
 
-**Remaining to close G0:** items 4 and 5, plus G0-T2.
+**Remaining to close G0:** two items, both on the CI side. **(a)** CI must be able to run at all —
+open a PR for the Layer-0 branch, or widen `ci.yml`'s `push` trigger; **(b)** the negative case
+must be written, so a deliberate `avx2::` call fails the aarch64 job. Step-by-step:
+[`18-implementation-plan/01-g0-repository-health.md`](18-implementation-plan/01-g0-repository-health.md)
+and [`20-completion/01-outstanding-work.md`](20-completion/01-outstanding-work.md) Phase A.
 
 > **Standing rule from this gate:** never call an architecture-specific backend path
 > (`mlkem768::avx2::*`, `::neon::*`) directly. Always use the top-level dispatching entry
@@ -157,10 +170,20 @@ G0 → G1 → G2 → G3 → G4 → G6 → G7      (the binding sequence)
 1. **Versioned algorithm registry.** Every signed or hashed object carries an algorithm
    identifier; verification dispatches through the registry. No direct calls to a named
    scheme outside the registry.
-2. **SLH-DSA-128s** — satisfy the FIPS 205 test module already written at
-   `src/crypto/mod.rs:1728+` (PK 32 B, SK 64 B, sig 7,856 B). Per
+   - ⚠️ **Decide the *role* dimension before writing the registry.** Resolution must be
+     `(role, suite version) → primitive`, where role ∈ {transaction, quorum-cert, identity,
+     governance}. Transaction authorization and quorum certification are different design
+     problems (arXiv:2609.24689), and adding the dimension after every object type embeds an
+     algorithm ID is a **state migration**, not a parameter change. This is the one item on
+     the 2026 L0 review with a closing window — see
+     [`brainstorming/01-layer0-technology-review-2026.md`](brainstorming/01-layer0-technology-review-2026.md) §2.1.
+   - Re-run **R-A2** (ML-DSA-44 vs -65) **per role** on this gate's benchmarks, not globally.
+2. **SLH-DSA-128s** — satisfy the FIPS 205 test module (PK 32 B, SK 64 B, sig 7,856 B). Per
    [ADR-0002](adr/0002-cryptographic-parameter-set.md) this is the long-lived
    identity/root-of-trust scheme; ML-DSA-44 stays the hot per-block signer.
+   Implementation: **`fips205`** (pure Rust, no `unsafe`); RustCrypto **`slh-dsa`** as a CI
+   differential oracle (decided 2026-09-22 — see
+   [repository-structure](10-development/repository-structure.md) §*Dependency policy*).
 3. **Byte-exact KAT fixtures** committed for ML-DSA-44, ML-KEM-768, SLH-DSA-128s, and the
    hash domains ([ADR-0010](adr/0010-hash-function-domains.md)).
 4. Hybrid X25519 + ML-KEM-768 key agreement (needed by G5).
@@ -176,6 +199,7 @@ G0 → G1 → G2 → G3 → G4 → G6 → G7      (the binding sequence)
 | **G1-T3** | **KAT byte-exactness.** Given fixed seeds, keys and signatures match committed fixtures byte-for-byte across both architectures | Guards against a backend swap (see G0-T1) silently changing outputs — which would fork the chain |
 | **G1-T4** | **Unknown algorithm ID is rejected, never ignored.** An object bearing an unregistered ID fails closed with a distinct error | Fail-open on algorithm ID is how agility frameworks become downgrade attacks |
 | **G1-T5** | **Hybrid handshake retains PQ security if the classical half is broken.** With X25519 output forced to a constant, derived session keys still differ per session | Proves the hybrid is genuinely hybrid rather than classical-with-decoration |
+| **G1-T6** | **Role confusion is rejected.** A signature produced under the transaction role fails verification when presented as a quorum-certificate signature, and vice versa — for every ordered pair of roles | The role dimension is worthless if the verifier will accept any role's primitive. This is G1-T2's argument applied to the axis added in 2026 |
 
 **Exit:** registry is the only path to a primitive; SLH-DSA test module un-ignored and green;
 KATs committed; G1-T1 demonstrated in CI.
@@ -269,7 +293,7 @@ functions; the TCHAO conflict-graph scheduler
 
 ## G5 · Transport and the P2P layer
 
-> Runs **in parallel** with G3/G4. Today `src/network/` defines message *types* only — there
+> Runs **in parallel** with G3/G4. Today `crates/hux-network/` defines message *types* only — there
 > is no swarm, no transport, no peer state machine.
 
 **Unblocks:** G6. **Entry:** G2.
@@ -281,15 +305,43 @@ and [ADR-0012](adr/0012-network-transport.md): libp2p/QUIC transport; hybrid
 X25519 + ML-KEM-768 handshake with ML-DSA-44 authentication; GossipSub with the existing
 signed envelopes; Kademlia DHT with signed entries; peer scoring and rate limits.
 
+**🔬 Entry spike (blocks the rest of G5):** does `libp2p-quic` accept a custom rustls
+configuration carrying an **ML-DSA-44 certificate** and a custom cert verifier — or must quinn be
+driven directly behind libp2p's transport trait, or `libp2p-tls` forked? `libp2p_quic::Config`
+builds its TLS config internally. Timebox it; the answer decides how much of G5 is integration
+versus implementation. If blocked, fall back to the certificate-extension bridge recorded in
+[ADR-0019](adr/0019-transport-authentication.md) — **never** the exporter-binding phase.
+
+Then implement [ADR-0019](adr/0019-transport-authentication.md):
+
+- **Native ML-DSA-44 TLS certificates**, mutual auth, self-signed, verifier checks the
+  self-signature then `SHAKE-256(spki)[..32] == expected PeerId`. No CA, no trust store, no
+  revocation.
+- **`KeyPurpose::Transport`** (`m/44'/931931'/4'/0'/{i}'`) 🟢 — never the consensus hot key.
+- **ALPN `huxplex/{network}/1`** — network separation enforced by QUIC before Huxplex code runs.
+- **1-RTT resumption on, 0-RTT early data off.**
+- **Pad the client Initial** so the responder's ≈7,970 B first flight stays inside RFC 9000
+  §8.1's 3× budget.
+- Pin `rustls` to an exact version (≥ 0.23.44, `aws-lc-rs` provider) and add it to `deny.toml`
+  review — it is a deliberate principle-8 exception.
+
+Plus, from the 2026 L0 review:
+
+- **Treat block propagation as a separate path from gossip**: GossipSub for
+  mempool/intents/control, erasure-coded broadcast for blocks and DAG batches (wire spec §5.1
+  guardrail; full ADR at G6). MVP may gossip blocks; the spec must not assume it forever.
+
 ### 🎯 High-concept tests
 
 | ID | Property | Why it is decisive |
 |---|---|---|
-| **G5-T1** | **Authenticated handshake, no downgrade.** A peer offering only classical key agreement is rejected; a MITM substituting its own ML-DSA key fails to complete | The PQ transport claim, tested at the only place it can be falsified |
+| **G5-T1** | **Authenticated handshake, no downgrade.** A peer offering only classical key agreement is rejected; a MITM substituting its own ML-DSA certificate fails the `PeerId` check; a peer presenting no client certificate never reaches an application stream; a cross-network ALPN is refused by QUIC | The PQ transport claim, tested at the only place it can be falsified. Mutual auth and ALPN separation are part of the claim, not extras |
 | **G5-T2** | **`PeerId` is bound to the key.** `PeerId = SHAKE-256(pk)[..32]`; a peer cannot present a `PeerId` it does not hold the key for | Sybil resistance starts here 🟢 (already type-level tested) |
 | **G5-T3** | **Gossip amplification is bounded.** Under a flood of malformed and unsigned messages, per-peer bandwidth stays bounded and the offender is scored down and disconnected | ML-DSA's 2,420-byte signatures make gossip amplification an unusually cheap DoS on this chain specifically |
 | **G5-T4** | **Message propagation under partition.** With 20% packet loss and a healed partition, all honest nodes converge on the same message set | The property consensus will silently assume |
 | **G5-T5** | **Signed DHT entries reject forgery and replay.** A record signed for one key cannot be republished under another, nor replayed after expiry | 🟢 struct-level tests exist; extend to the live DHT |
+| **G5-T6** | **The handshake respects QUIC's amplification limit.** An unvalidated client address never receives more than 3× the bytes it sent, measured on the wire — asserted as a property of the *responder's first flight*, and re-asserted whenever the suite changes | ≈7,970 B against a ≈8,100 B budget is a **thin margin by design** (ADR-0019 §6). It will be broken silently by a larger parameter set, a second certificate, or an SLH-DSA proof (7,856 B alone). Only a test keeps it honest |
+| **G5-T7** | **Transport signatures and protocol signatures cannot be confused.** A TLS `CertificateVerify` signature must not verify as any Huxplex protocol signature, and no `huxplex-…:v1` signature may be accepted by the TLS layer — for every context in the registry | Two ML-DSA keys from one hierarchy now sign under two different disciplines (TLS's context and ours). FIPS 204 separates them structurally; ADR-0019 §4 requires proving it rather than assuming it |
 
 **Exit:** 5 nodes discover each other, gossip, and sustain a signed session over QUIC; abuse
 tests green.

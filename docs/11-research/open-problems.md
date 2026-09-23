@@ -9,14 +9,16 @@ places. Items are tagged by severity: 🔴 (blocks a phase / could invalidate a 
 
 | ID | Problem | Sev | Owner doc |
 |---|---|---|---|
-| R-A1 | **No efficient PQ signature aggregation** → consensus quorum-certificate bloat; can a STARK-compressed certificate fix it affordably? | 🔴 | [consensus](../02-architecture/consensus.md), [zk-proofs](../05-identity/zk-proofs.md) |
-| R-A2 | ML-DSA-44 (Cat 1) vs ML-DSA-65 (Cat 3) for the hot path — security/perf/bandwidth tradeoff | 🟠 | [pq-cryptography](../03-post-quantum/pq-cryptography.md) |
-| R-A3 | Audited Rust LB-VRF + PQ-SSLE constructions — do they exist, or must we build/commission them? | 🔴 | [cryptography](../02-architecture/cryptography.md) |
+| R-A1 | **PQ quorum-certificate aggregation — which candidate, at what cost to the key lifecycle?** Candidates now exist (Chipmunk ~20 KB @ 1,024 signers; Lemur+ ~56 KB @ 10⁶; STARK-compressed O(1)), but **all are synchronized/stateful**, so the choice constrains ADR-0014's key hierarchy. Reframed 2026-09-22 from "does anything exist?". The answer now has somewhere to land: the `QuorumCert` role ([ADR-0018](../adr/0018-signature-role-profiles.md)), adoptable by version bump without touching transactions | 🔴 | [consensus](../02-architecture/consensus.md), [cryptography](../02-architecture/cryptography.md), [zk-proofs](../05-identity/zk-proofs.md) |
+| R-A2 | ML-DSA-44 (Cat 1) vs ML-DSA-65 (Cat 3) — **per signature role** ([ADR-0018](../adr/0018-signature-role-profiles.md)). ✅ **v1 decided 2026-09-22: ML-DSA-44 for all roles**, because measuring its overhead *is* v1's research deliverable. Open for **mainnet**: Sui chose 65, CNSA 2.0 mandates 87, against a measured 40–50% TPS cost at 44 (BSC); genesis also pairs a Cat-1 signature with a Cat-3 KEX. Now a registry row, not a redesign | 🟡 | [pq-cryptography](../03-post-quantum/pq-cryptography.md), [cryptography](../02-architecture/cryptography.md) |
+| R-A3 | ~~LB-VRF~~ **iVRF** + PQ-SSLE — does iVRF's modified uniqueness hold for a *bounded, known* Q-BFT validator set, or only for Algorand-style open sortition? Is there an audited Rust PQ-SSLE construction? | 🔴 | [cryptography](../02-architecture/cryptography.md) |
 | R-A4 | Decentralized, bias-resistant randomness beacon to replace trusted QRNG | 🟠 | [quantum-era-risks](../01-vision/quantum-era-risks.md) |
 | R-A5 | Trigger criteria that reliably indicate a PQ scheme is being broken before catastrophic loss | 🔴 | [quantum-threats](../08-security/quantum-threats.md) |
 | R-A6 | Hybrid *signatures* (not just KEX) — worth the doubled size as insurance? | 🟡 | [pq-cryptography](../03-post-quantum/pq-cryptography.md) |
 | R-A7 | Threshold/MPC ML-DSA signing — practical audited construction? | 🟠 | [key-management](../03-post-quantum/key-management.md) |
 | R-A8 | Migrate shielded/ZK state across a crypto-suite change without breaking unlinkability | 🔴 | [migration-strategy](../03-post-quantum/migration-strategy.md), [privacy](../05-identity/privacy.md) |
+| R-A9 | ✅ **Cadence decided 2026-09-22** ([ADR-0014](../adr/0014-validator-key-management.md) amendment): rotate a `Transaction` session key after **50,000 signatures or 7 days**, ≈4× margin under the 190,000-signature sign-leakage bound (eprint 2026/1366). *Still open:* reconciling that cadence with the multi-year committed key lifetimes synchronized aggregation (R-A1) requires — the substance of `adr/0021-*` | 🟠 | [ADR-0014](../adr/0014-validator-key-management.md), [key-management](../03-post-quantum/key-management.md) |
+| R-A10 | Side-channel and fault-injection test methodology beyond FIPS KATs, given that the vulnerable seed-pointer pattern (eprint 2025/2009) is present in PQM4, liboqs, PQClean and wolfSSL — and `libcrux-*` is still `0.0.x` | 🟠 | [cryptography](../02-architecture/cryptography.md), [testing-strategy](../10-development/testing-strategy.md) |
 
 ## B. Consensus, state & execution
 
@@ -32,6 +34,8 @@ places. Items are tagged by severity: 🔴 (blocks a phase / could invalidate a 
 | R-B8 | Unlinkable nullifier derivation compatible with fast membership tests (privacy) | 🟠 | [state-management](../02-architecture/state-management.md), [privacy](../05-identity/privacy.md) |
 | R-B9 | Light-client viability under PQ proof/signature sizes | 🟠 | [storage](../02-architecture/storage.md) |
 | R-B10 | Restricted predicate language vs full WASM for resource `logic` | 🟡 | [state-management](../02-architecture/state-management.md) |
+| R-B11 | **Erasure-coded block broadcast vs GossipSub** under PQ object sizes — can one dissemination path serve both the block/DAG-batch traffic and the DAG mempool's causal batches, or do they want separate ones? (ethp2p, RaptorCast, Optimum P2P) | 🟠 | [networking](../02-architecture/networking.md), [consensus](../02-architecture/consensus.md) |
+| ~~R-B12~~ | ✅ **Resolved 2026-09-22 by [ADR-0019](../adr/0019-transport-authentication.md).** Neither a bespoke handshake nor an application-level binding: ML-DSA-44 enters TLS 1.3 **natively** as `SignatureScheme` 0x0904 (`draft-ietf-tls-mldsa-06`, rustls 0.23.44). *Residual:* the responder's ≈7,970 B first flight sits close to QUIC's 3× budget and is held by client-Initial padding — pinned by G5-T6, and the `libp2p-quic` integration spike is a G5 entry task | — | [ADR-0019](../adr/0019-transport-authentication.md), [wire spec §2](../15-specifications/05-network-wire-protocol.md) |
 
 ## C. AI economy & mechanism design
 

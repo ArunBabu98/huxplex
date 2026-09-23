@@ -1,0 +1,18 @@
+[package]
+name = "hux-network"
+description = "Huxplex Layer 0 — peer identity, signed gossip and DHT envelopes, and (from G5) the libp2p/QUIC transport."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+hux-crypto.workspace = true
+thiserror.workspace = true
+sha2.workspace = true
+sha3.workspace = true
+hex.workspace = true
