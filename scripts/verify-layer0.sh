@@ -54,15 +54,21 @@ fi
 run "Formatting is canonical"           cargo fmt --all --check
 run "No clippy lints"                   cargo clippy --all-targets --all-features -- -D warnings
 run "Crate layering is downward-only"   ./scripts/check-layering.sh
-run "Workspace builds"                  cargo build --all-targets --locked
-run "Test suite"                        cargo test --all-features --locked
+run "No arch-specific backend paths"    ./scripts/check-arch-portability.sh
+run "Workspace builds"                  cargo build --all-targets --all-features --locked
+run "Test suite"                        cargo test --all-targets --all-features --locked
+run "Doctests"                          cargo test --doc --all-features --locked
 run "Docs build without warnings"       env RUSTDOCFLAGS='-D warnings' cargo doc --no-deps --all-features
 run "Crypto walkthrough self-verifies"  cargo run -q -p hux-crypto  --example crypto_walkthrough
 run "Network walkthrough self-verifies" cargo run -q -p hux-network --example network_walkthrough
 
 # Determinism: the same inputs must produce the same test outcome twice in a row. A flake here
 # means something in the crypto path is not deterministic, which for an L1 is a fork risk.
-run "Tests are deterministic (re-run)"  cargo test --all-features --locked
+run "Tests are deterministic (re-run)"  cargo test --all-targets --all-features --locked
+
+# G0-T1 negative case: on aarch64, a deliberate avx2:: call must be REJECTED by the compiler.
+# Skips itself on x86-64, where the backend exists and rejecting it would prove nothing.
+run "Arch guard catches a regression"   ./scripts/check-arch-negative.sh
 
 # Reproducible builds (G0-T2). Two full release builds, so it is opt-in: pass --full, or set
 # HUX_VERIFY_FULL=1. CI always runs it.
@@ -87,10 +93,11 @@ done
 printf '\n'
 if [[ "$failures" -eq 0 ]]; then
   printf '  %sAll %d checks passed on %s.%s\n' "$GREEN" "${#NAMES[@]}" "$(uname -m)" "$RESET"
-  printf '\n  %sLayer 0 is NOT complete.%s G0 (repo health) is near-closed but still open on\n' "$YELLOW" "$RESET"
-  printf '  dual-architecture CI; G1 (agility registry) and G5 (transport) have not started.\n'
+  printf '\n  %sLayer 0 is NOT complete.%s G0 (repo health) is closed; G1 (agility registry)\n' "$YELLOW" "$RESET"
+  printf '  and G5 (transport) have not started — so this is one of three gates.\n'
   printf '  What you just verified is the primitive layer: signatures, KEM, derivation, domain\n'
-  printf '  separation, signed envelopes — on THIS architecture only.\n'
+  printf '  separation, signed envelopes — on THIS architecture only. Cross-architecture\n'
+  printf '  agreement is proven by the CI matrix, not by this run.\n'
   printf '  Status: docs/20-completion/   Build order: docs/18-implementation-plan/\n'
 else
   printf '  %s%d of %d checks FAILED.%s\n' "$RED" "$failures" "${#NAMES[@]}" "$RESET"

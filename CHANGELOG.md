@@ -81,14 +81,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `docs/19-verification/` — how a developer or contributor checks Layer 0 themselves: quick
   start, what each automated check proves, per-property manual procedures for crypto and
   networking, cross-architecture diffing, and an explicit list of what is **not** verifiable yet.
-- CI is now configured with an explicit architecture matrix (`x86_64`, `aarch64` Linux, `aarch64`
-  macOS), the layering check, the reproducible-build job, and both walkthroughs. **It has not yet
-  executed** — `ci.yml` triggers only on `push: [master]` and `pull_request`, and the Layer-0
-  branch has no PR. See `docs/20-completion/01-outstanding-work.md` §A1.
+- CI runs an explicit architecture matrix (`x86_64`, `aarch64` Linux, `aarch64` macOS), the
+  layering check, the architecture-portability guard, the reproducible-build job, and both
+  walkthroughs. It first executed on 2026-09-23 via PR #9 — before that `ci.yml` triggered only on
+  `push: [master]` and `pull_request`, and the Layer-0 branch had no PR, so the matrix had never
+  run at all. **All three legs green, 115 · 0 · 81 each, with byte-identical derived values.**
+- **G0-8 — the architecture-portability guard.** `scripts/check-arch-portability.sh` fails if any
+  Rust source calls a backend path directly (`::avx2::`, `::neon::`, `::simd256::`, `::simd128::`,
+  `::portable::`); `scripts/check-arch-negative.sh` injects `mlkem768::avx2::generate_key_pair`
+  into a throwaway copy of the tree and asserts the compiler rejects it (`E0433`) on aarch64. One
+  proves nobody wrote the call, the other proves the build would notice if they did — *a matrix
+  that only ever passes does not prove it would catch the regression it exists for.*
+- **`cargo test --doc`** in CI and the local harness. No doctests exist today; the run guards the
+  case where someone adds one, since `--all-targets` excludes them.
 - `docs/20-completion/` — a dated, evidence-backed audit of where the project actually stands
   against its own gates, plus the complete list of what remains to be completed and tested.
-  Verdict as of 2026-09-23: **Layer 0 for v1 is roughly one third complete** — G0 near-closed and
-  blocked on CI, G1 and G5 not started.
+  Verdict as of 2026-09-23: **Layer 0 for v1 is roughly one third complete** — **G0 closed**,
+  G1 and G5 not started.
 - Four secret-hygiene tests and a `zeroize_now()` wipe API.
 - `docs/18-implementation-plan/` — how Layer 0 actually gets built: workspace migration, G0/G1/G5
   task breakdowns with per-task acceptance criteria, sequencing rules, five named risks, and

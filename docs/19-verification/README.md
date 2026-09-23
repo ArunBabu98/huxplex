@@ -57,8 +57,7 @@ finished.
 unlock each gate are in [`../18-implementation-plan/`](../18-implementation-plan/) and
 [`../16-action-plan.md`](../16-action-plan.md). For where the project actually stands against
 them — audited, with the commands behind every claim — see
-[`../20-completion/`](../20-completion/). As of 2026-09-23: **G0 near-closed and blocked on CI
-that has never run, G1 and G5 not started.**
+[`../20-completion/`](../20-completion/). As of 2026-09-23: **G0 closed; G1 and G5 not started.**
 
 ## What each automated check proves
 
@@ -67,6 +66,8 @@ that has never run, G1 and G5 not started.**
 | Formatting is canonical | The tree matches `rustfmt.toml` | Diff noise hides real changes in security-critical code |
 | No clippy lints | `-D warnings` across all targets and features | A warning tolerated once is a warning ignored forever |
 | Crate layering is downward-only | `hux-network → hux-crypto`, never upward | Layering is what keeps the crypto crate independently auditable and exportable ([repository-structure](../10-development/repository-structure.md)) |
+| No arch-specific backend paths | No `::avx2::`, `::neon::`, `::simd256::`, `::simd128::` call in any Rust source | Hardcoding one backend excludes an entire architecture from the validator set. This is the break that started G0 |
+| Arch guard catches a regression | On aarch64, an injected `mlkem768::avx2::*` call is **rejected** by the compiler | A check that can only pass proves nothing. This one is verified by deliberately breaking the tree |
 | Workspace builds | `--locked`, so the committed `Cargo.lock` is honoured | A build that silently resolves different dependencies is not the build we tested |
 | Test suite | **115 tests pass, 81 correctly ignored** | Every ignored test names the gate that un-ignores it (G0-T3) |
 | Docs build without warnings | `RUSTDOCFLAGS=-D warnings` | Broken intra-doc links mean the reasoning trail is rotting |
@@ -105,6 +106,24 @@ every ARM build.
 If you have access to both, run the harness on `x86_64` and on `aarch64` and confirm the
 walkthroughs print **identical** key, `PeerId` and shared-secret values. They are deterministic
 in their seeds, so any difference between architectures is a bug worth reporting immediately.
+
+> **This has been done, and it holds.** CI runs both walkthroughs on `x86_64` Linux, `aarch64`
+> Linux and `aarch64` Darwin. Diffing the three transcripts, the only differing lines are the
+> architecture name each program prints about itself — every derived value is byte-identical.
+> The simd256, simd128 and portable backends provably agree, so a backend difference cannot fork
+> the network. Re-run it yourself rather than trusting this paragraph; that is the point of the
+> section.
+
+You do not need two machines to check the *guard*, though. On aarch64:
+
+```bash
+./scripts/check-arch-negative.sh
+```
+
+It stages a throwaway copy of the tree, injects the exact call that once broke every ARM build
+(`mlkem768::avx2::generate_key_pair`), and asserts the compiler rejects it with `E0433`. If that
+ever passes, the portability guarantee is not being enforced and the matrix would not catch a
+recurrence.
 
 ## If a check fails
 

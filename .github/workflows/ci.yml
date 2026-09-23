@@ -34,13 +34,17 @@ jobs:
       - run: cargo clippy --all-targets --all-features -- -D warnings
 
   layering:
-    name: crate layering (downward-only)
+    name: static gates (layering, arch portability)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: Enforce the dependency rule
         # docs/10-development/repository-structure.md — a cycle is a build failure.
         run: ./scripts/check-layering.sh
+      - name: No architecture-specific backend paths (G0-8, static half)
+        # docs/16-action-plan.md § G0 standing rule. Proves nobody WROTE the call; the
+        # negative case in the test matrix proves the build would NOTICE if they did.
+        run: ./scripts/check-arch-portability.sh
 
   test:
     name: test (${{ matrix.arch }})
@@ -62,13 +66,22 @@ jobs:
       - name: Report architecture
         run: uname -m && rustc -vV
       - name: Build
-        run: cargo build --all-targets --locked --verbose
+        run: cargo build --all-targets --all-features --locked --verbose
       - name: Test
-        run: cargo test --all-features --locked --verbose
+        # Single invocation, identical to scripts/verify-layer0.sh and to the G0-T1 acceptance
+        # criterion. --all-targets excludes doctests, hence the separate --doc run below.
+        run: cargo test --all-targets --all-features --locked --verbose
+      - name: Doctests
+        run: cargo test --doc --all-features --locked
       - name: Self-verifying walkthroughs
         run: |
           cargo run -q -p hux-crypto  --example crypto_walkthrough
           cargo run -q -p hux-network --example network_walkthrough
+      - name: "G0-T1 negative case — a deliberate avx2:: call must fail here"
+        # Skipped on x86-64, where the backend genuinely exists and rejecting it would prove
+        # nothing. On aarch64 this is the whole point of the matrix.
+        if: matrix.arch != 'x86_64'
+        run: ./scripts/check-arch-negative.sh
 
   reproducible:
     name: reproducible build (G0-T2)
