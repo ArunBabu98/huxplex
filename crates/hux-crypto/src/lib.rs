@@ -10,11 +10,24 @@
 
 pub mod bip32;
 pub mod error;
-pub mod kem;
 pub mod privatekey;
 pub mod publickey;
 pub mod signature;
 pub mod signaturescheme;
+
+/// Raw primitives. These modules are the **only** places permitted to name a vendor crate
+/// (`libcrux_ml_dsa`, `libcrux_ml_kem`); everything above reaches them through the suite
+/// registry and the primitive traits (G1 task C4, enforced by
+/// `scripts/check-primitive-encapsulation.sh`).
+pub mod kem {
+    pub mod ml_kem;
+    // Re-exported so `hux_crypto::kem::kem768_*` keeps working: the move into `kem/ml_kem.rs`
+    // is about where the vendor crate may be named, not a public-API change.
+    pub use ml_kem::*;
+}
+pub mod sig {
+    pub mod ml_dsa;
+}
 
 // API contracts for primitives that are specified and test-covered but NOT yet implemented.
 // They are `#[cfg(test)]` so the conformance suites below type-check against a fixed

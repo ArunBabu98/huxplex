@@ -1,10 +1,7 @@
-use libcrux_ml_dsa::ml_dsa_44;
 use rand::Rng;
 
 use crate::{
-    error::{CryptoError, CryptoResult},
-    privatekey::PrivateKey,
-    publickey::PublicKey,
+    error::CryptoResult, privatekey::PrivateKey, publickey::PublicKey, sig::ml_dsa,
     signaturescheme::SignatureSchemeId,
 };
 
@@ -23,13 +20,13 @@ impl Keypair {
     pub fn generate(scheme: SignatureSchemeId, seed: [u8; 32]) -> CryptoResult<Self> {
         match scheme {
             SignatureSchemeId::Dilithium2 => {
-                let keypair = ml_dsa_44::generate_key_pair(seed);
+                let (pk, sk) = ml_dsa::generate(seed);
                 Ok(Keypair {
                     publickey: PublicKey {
                         scheme: scheme.clone(),
-                        bytes: keypair.verification_key.as_ref().to_vec(),
+                        bytes: pk,
                     },
-                    privatekey: PrivateKey::new(scheme, keypair.signing_key.as_ref().to_vec()),
+                    privatekey: PrivateKey::new(scheme, sk),
                 })
             }
         }
@@ -44,25 +41,28 @@ impl Keypair {
     }
 
     pub fn sign(&self, message: &[u8], context: Option<&[u8]>) -> CryptoResult<Signature> {
-        let sk_bytes: [u8; 2560] = self
-            .private_key()
-            .expose_secret()
-            .try_into()
-            .map_err(|e| CryptoError::InvalidSecretKeySize(format!("{:?}", e)))?;
+        // Per-signature randomness from the system CSPRNG. Deterministic lattice signing plus
+        // fault injection is a demonstrated key-recovery path (eprint 2025/2009), so hedging is
+        // mandatory, not optional. G1 task C9 will make the deterministic path reachable only
+        // from a separate test-only entry point, so no caller can supply this value.
+        let mut randomness = [0u8; ml_dsa::SIGNING_RANDOMNESS_LEN];
+        rand::rng().fill_bytes(&mut randomness);
 
-        let signing_key = ml_dsa_44::MLDSA44SigningKey::new(sk_bytes);
-
-        let mut randomness = [0u8; 32];
-        let mut rng = rand::rng();
-        rng.fill_bytes(&mut randomness);
         let ctx_bytes = context.unwrap_or(&[]);
 
-        let sig_obj = ml_dsa_44::sign(&signing_key, message, ctx_bytes, randomness)
-            .map_err(|e| CryptoError::SigningFailed(format!("{:?}", e)))?;
-
-        Ok(Signature {
-            scheme: self.public_key().scheme.clone(),
-            bytes: sig_obj.as_ref().to_vec(),
-        })
+        match self.public_key().scheme {
+            SignatureSchemeId::Dilithium2 => {
+                let bytes = ml_dsa::sign(
+                    self.private_key().expose_secret(),
+                    message,
+                    ctx_bytes,
+                    randomness,
+                )?;
+                Ok(Signature {
+                    scheme: self.public_key().scheme.clone(),
+                    bytes,
+                })
+            }
+        }
     }
 }

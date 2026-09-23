@@ -1,8 +1,7 @@
 // crates/hux-crypto/src/publickey.rs
-use libcrux_ml_dsa::ml_dsa_44;
-
 use crate::{
     error::{CryptoError, CryptoResult},
+    sig::ml_dsa,
     signature::Signature,
     signaturescheme::SignatureSchemeId,
 };
@@ -29,34 +28,12 @@ impl PublicKey {
             });
         }
 
+        // 2. Resolve the context (default to empty slice)
+        let ctx_bytes = context.unwrap_or(&[]);
+
         match self.scheme {
             SignatureSchemeId::Dilithium2 => {
-                // 2. Prepare the Public Key (1312 bytes)
-                let pk_bytes: [u8; 1312] = self.bytes.as_slice().try_into().map_err(|_| {
-                    CryptoError::InvalidPublicKeySize(format!(
-                        "Expected 1312 bytes, got {}",
-                        self.bytes.len()
-                    ))
-                })?;
-                let verification_key = ml_dsa_44::MLDSA44VerificationKey::new(pk_bytes);
-
-                // 3. Prepare the Signature (2420 bytes)
-                let sig_bytes: [u8; 2420] =
-                    signature.bytes.as_slice().try_into().map_err(|_| {
-                        CryptoError::InvalidSignatureLength {
-                            expected: 2420,
-                            actual: signature.bytes.len(),
-                        }
-                    })?;
-                let mldsa_sig = ml_dsa_44::MLDSA44Signature::new(sig_bytes);
-
-                // 4. Resolve the context (default to empty slice)
-                let ctx_bytes = context.unwrap_or(&[]);
-
-                // 5. Verify: (Key, Message, Context, Signature)
-                let result = ml_dsa_44::verify(&verification_key, message, ctx_bytes, &mldsa_sig);
-
-                Ok(result.is_ok())
+                ml_dsa::verify(&self.bytes, message, ctx_bytes, &signature.bytes)
             }
         }
     }
