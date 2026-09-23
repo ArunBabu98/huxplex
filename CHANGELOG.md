@@ -64,7 +64,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`slh_dsa`, `lb_vrf`, `pq_ssle`, `zk_stark`) stay co-located inside their `#[cfg(test)]`
   modules — moving them to `tests/` would have required making `unimplemented!()` cryptography
   publicly reachable. 112 tests and all 84 `GATE:`-labelled ignores unchanged throughout (the
-  tree now stands at 115 / 81 — three vacuously-gated size assertions were un-ignored afterwards).
+  tree now stands at 117 / 81 — three vacuously-gated size assertions were un-ignored afterwards,
+  and the DHT field-framing fix added two).
 - **Reproducible release builds (G0-T2)** — `scripts/check-reproducible.sh` stages two
   independent clean copies of the source, builds each at a canonical path, and compares artifact
   hashes. Runs in CI and via `verify-layer0.sh --full`. Recipe: pinned toolchain + `--locked` +
@@ -104,6 +105,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   explicit stop conditions.
 
 ### Fixed
+- **`DhtEntry` signatures were forgeable across the key/value boundary.** The signed payload was
+  the bare concatenation `key || value`, which encodes no field boundary — so `("abc","XY")` and
+  `("ab","cXY")` sign identically, and `verify()`, which rebuilds the payload from the record's
+  own fields, accepted the re-split. An attacker who observed **any** signed record could
+  republish the publisher's signature **under a different DHT key** while holding no key
+  material; since the key decides routing, that is routing-table poisoning for free. This
+  falsified G5-T5 ("a record signed for one key cannot be republished under another") and was the
+  exact ambiguity G2-T2 forbids. The payload is now length-framed —
+  `u64_be(len(key)) || key || u64_be(len(value)) || value` — normative in the
+  [wire protocol](docs/15-specifications/05-network-wire-protocol.md) and
+  [cryptography spec](docs/15-specifications/02-cryptography-spec.md), and pinned by
+  `test_dht_entry_key_value_boundary_is_unambiguous` and
+  `test_dht_entry_empty_key_and_empty_value_are_distinguishable`. **This changes the signed
+  bytes** — free now, since no network exists, and expensive after one does. The three existing
+  tamper tests never caught it because they mutate one field at a time, which changes the
+  concatenation; this attack preserves it. Tamper-resistance and encoding-unambiguity are
+  different properties, and only the second forbids two records sharing one signature.
 - **`PrivateKey` leaked secret key material through `Debug`.** A derived `Debug` meant any
   `dbg!`, `{:?}`, `tracing::debug!` or panic message carrying a `Keypair` printed all 2,560
   bytes of the ML-DSA-44 signing key — and validator logs are routinely shipped off-host. The

@@ -36,9 +36,9 @@ G3 (ledger), G4 (execution), G6 (consensus) and G7 (devnet) have no code whatsoe
 
 | Check | Command | Result |
 |---|---|---|
-| Full local harness | `./scripts/verify-layer0.sh` | **9/9 PASS** — fmt, clippy `-D warnings`, layering, build `--locked`, tests, docs, both walkthroughs, determinism re-run |
+| Full local harness | `./scripts/verify-layer0.sh` | **12/12 PASS** — fmt, clippy `-D warnings`, layering, arch-portability guard, build `--locked`, tests, doctests, docs, both walkthroughs, determinism re-run, arch negative case. (9/9 at audit time; G0-8 added three.) |
 | Reproducible build (G0-T2) | `./scripts/check-reproducible.sh` | **PASS** — `libhux_crypto.rlib` `5e495a84…b5a0` and `libhux_network.rlib` `334fb745…2957` identical across two independent clean copies |
-| Test suite | `cargo test --all-features --locked` | **115 passed · 0 failed · 81 ignored** (hux-crypto 76 + 81 ignored; hux-network 39) |
+| Test suite | `cargo test --all-targets --all-features --locked` | **117 passed · 0 failed · 81 ignored** (hux-crypto 76 + 81 ignored; hux-network 41). Was 115 at audit time; the DHT field-framing fix (§5.1) added two |
 | Gate labels (G0-T3) | `grep -rn '#\[ignore' crates/` | **81/81 labelled** — `GATE: G1` ×22, `GATE: G6+` ×33, `GATE: G10` ×26 |
 | Supply chain | `cargo deny check advisories licenses bans sources` | **ok** — one documented, owned, dated advisory exception (`RUSTSEC-2026-0173`) |
 | Second architecture (local) | `cargo test --all-features --locked --target x86_64-apple-darwin` | **115 passed** — but see §3.2, this is Rosetta and it proves less than it appears to |
@@ -234,7 +234,74 @@ One of six partially covered. **G1 has not started.**
 
 ## 5. G5 · Transport — 🔴 not started
 
-`hux-network` is **five source files, 183 lines**: `peer.rs` (PeerId), `topic.rs` (topic strings
+### 5.1 A live forgery found in the shipped envelope code (2026-09-23)
+
+Before any of the missing transport work below, a defect in what *does* exist:
+
+`DhtEntry` signed the bare concatenation `key ‖ value`. That encodes no field boundary, so
+`("abc","XY")` and `("ab","cXY")` produce identical signed bytes — and `verify()` rebuilds the
+payload from the record's own fields, so it **accepted** the re-split. Demonstrated on master:
+
+```
+forged re-split record verified = true
+a record signed for key [97, 98, 99] verified under key [97, 98]
+```
+
+An attacker who observes any signed record can republish the publisher's signature **under a
+different DHT key**, holding no key material. The key decides routing, so this is routing-table
+poisoning by a peer that possesses nothing — the precise opposite of **G5-T5**, *"a record signed
+for one key cannot be republished under another."*
+
+It is also exactly the ambiguity **G2-T2** exists to forbid: two distinct values must never share
+one encoding. The crypto spec described `key || value` as *"the grandfathered primitive
+encoding"* — treating as a style concession what was in fact a forgery.
+
+**Why the existing tests missed it.** `test_dht_entry_tampered_key_…`,
+`…tampered_value_…` and `…wrong_signer_…` all mutate one field independently, which changes the
+concatenation, so they passed throughout. Tamper tests establish that *changing* a field breaks
+the signature. They do not establish that the encoding is *unambiguous*. Those are different
+properties, and only the second forbids two distinct records sharing one signature.
+
+**Fixed** by framing both fields — `u64_be(len(key)) ‖ key ‖ u64_be(len(value)) ‖ value` —
+normative in [wire spec §4](../15-specifications/05-network-wire-protocol.md) and
+[crypto spec §6.3](../15-specifications/02-cryptography-spec.md), pinned by
+`test_dht_entry_key_value_boundary_is_unambiguous` and
+`test_dht_entry_empty_key_and_empty_value_are_distinguishable`. It changes the signed bytes,
+which is free now and would not have been once a network existed.
+
+> **The transferable lesson.** Ad-hoc concatenation of variable-length fields is not a neutral
+> shortcut; it is an encoding decision, and an ambiguous one. This is an argument for doing G2
+> earlier rather than later — see §5.2 on the ordering problem.
+
+### 5.2 An ordering gap in the definition of "Layer 0 complete"
+
+Layer 0 is defined as **G0 + G1 + G5**
+([04-sequencing-and-risks](../18-implementation-plan/04-sequencing-and-risks.md)). But G5's entry
+condition is **G2** — canonical encoding — and that same document's critical path marks G2
+*"NOT in this plan"*:
+
+```
+G0 closed
+  └→ G1  (C1…C11)         registry first, then primitives
+       └→ G2 …            canonical encoding — NOT in this plan
+            └→ G5 (N0 first, then N1…N11)
+```
+
+So Layer 0, as defined, cannot complete without a gate its own definition omits. Either G2 is de
+facto part of Layer 0, or G5's dependency on it needs re-examining. This is a decision to take
+deliberately rather than discover midway through G5.
+
+§5.1 is evidence for taking it sooner: a canonical-encoding defect was already live in shipped
+envelope code, and the spec had blessed it. The encoding discipline G2 would have imposed was
+needed before G5, not after.
+
+**What is unblocked regardless:** **N0**, the entry spike, is pure investigation with no code in
+the tree, and the sequencing doc explicitly lists it as startable immediately. Nothing else in
+G5 should begin before the G2 question is settled.
+
+### 5.3 What exists today
+
+`hux-network` is **five source files, 209 lines**: `peer.rs` (PeerId), `topic.rs` (topic strings
 and context derivation), `message.rs` (`GossipMessage`, `DhtEntry`), `error.rs`, and a 10-line
 `lib.rs` of module declarations.
 
@@ -255,7 +322,7 @@ crates are dependencies at all. No finding is recorded in
 | **G5-T2** — `PeerId` bound to the key | 🟡 **struct-level only** — 7 tests in `peer_identity.rs` prove the derivation; nothing proves it over a live connection |
 | **G5-T3** — gossip amplification bounded | ❌ no peer scoring, no rate limits, no live gossip |
 | **G5-T4** — propagation under partition | ❌ no network to partition |
-| **G5-T5** — signed DHT entries reject forgery and replay | 🟡 **struct-level only** — forgery, tamper and cross-network replay are all tested on the struct; there is no DHT |
+| **G5-T5** — signed DHT entries reject forgery and replay | 🟡 **struct-level only** — forgery, tamper, cross-network replay and (since §5.1) key/value re-splitting are tested on the struct; there is no DHT |
 | **G5-T6** — QUIC 3× amplification limit respected | ❌ no wire |
 | **G5-T7** — transport ≠ protocol signatures | ❌ no TLS layer |
 

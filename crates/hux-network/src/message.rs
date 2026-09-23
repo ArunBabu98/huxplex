@@ -74,9 +74,35 @@ impl DhtEntry {
         self.signer_pk.verify(&payload, &self.sig, Some(&ctx))
     }
 
+    /// Builds the signed payload with each field framed by its own length.
+    ///
+    /// ```text
+    /// u64_be(key.len()) ‖ key ‖ u64_be(value.len()) ‖ value
+    /// ```
+    ///
+    /// **Why framing, and not bare `key ‖ value`.** Concatenation alone does not encode where
+    /// the key ends, so `("abc", "XY")` and `("ab", "cXY")` produce identical signed bytes. The
+    /// DHT key decides routing and lookup, so an attacker who observes any signed record could
+    /// re-split it and republish the publisher's signature under a *different* key — without
+    /// holding a private key. [`DhtEntry::verify`] recomputes this payload from `self`, so it
+    /// accepted the forgery.
+    ///
+    /// That directly contradicts G5-T5 (*"a record signed for one key cannot be republished
+    /// under another"*), and it is the canonical-encoding failure G2-T2 exists to forbid: two
+    /// distinct values must never share one encoding.
+    ///
+    /// Length-prefixing the key alone would disambiguate, since the value is then the
+    /// remainder. Both fields are framed anyway, so the payload is self-describing and stays
+    /// unambiguous if a field is ever appended.
+    ///
+    /// This is a deliberately local framing, not a general codec. Structured consensus objects
+    /// get the canonical `Codec` at G2 (ADR-0011); this function is the grandfathered primitive
+    /// encoding for a type that predates it, made correct in place.
     fn payload(key: &[u8], value: &[u8]) -> Vec<u8> {
-        let mut payload = Vec::with_capacity(key.len() + value.len());
+        let mut payload = Vec::with_capacity(16 + key.len() + value.len());
+        payload.extend_from_slice(&(key.len() as u64).to_be_bytes());
         payload.extend_from_slice(key);
+        payload.extend_from_slice(&(value.len() as u64).to_be_bytes());
         payload.extend_from_slice(value);
         payload
     }

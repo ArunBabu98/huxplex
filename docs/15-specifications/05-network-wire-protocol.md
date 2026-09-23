@@ -140,8 +140,14 @@ is a conformance item to confirm against the published RFC.
   (Hostile-agent / spam mitigation, risk #6.)
 
 ## 4. Discovery (Kademlia DHT)
-- Records are `DhtEntry { key, value, network, sig, signer_pk }`, signed over `key‖value` with
-  context `huxplex-{network}:dht:entry:v1` (crypto spec §6.3) 🟢.
+- Records are `DhtEntry { key, value, network, sig, signer_pk }`, signed over the **length-framed**
+  payload `u64_be(len(key)) ‖ key ‖ u64_be(len(value)) ‖ value`, with context
+  `huxplex-{network}:dht:entry:v1` (crypto spec §6.3) 🟢.
+  > ⚠️ *Corrected 2026-09-23.* This previously specified the bare concatenation `key‖value`, which
+  > does not encode where the key ends: `("abc","XY")` and `("ab","cXY")` sign identically. Since
+  > the key decides routing, an attacker could re-split any observed record and republish the
+  > publisher's signature **under a different key**, holding no private key — the exact opposite
+  > of G5-T5. Framing is normative; implementations MUST NOT sign the bare concatenation.
 - The DHT **key SHOULD be the publisher's `PeerId`**; `value` is its dialable address(es).
 - A node MUST verify a `DhtEntry` signature before using it for routing (prevents routing-table
   poisoning — covered by existing tamper/wrong-signer tests).
