@@ -7,9 +7,26 @@ updates:
     open-pull-requests-limit: 10
     labels:
       - dependencies
-    # Group patch/minor bumps to reduce PR noise; security updates still come
-    # through individually.
     groups:
+      # The RustCrypto digest stack moves as ONE unit. sha2, sha3, hkdf and hmac all pin the
+      # same `digest` trait version, so bumping any one alone puts two incompatible `digest`
+      # versions in the tree and cannot compile. Ungrouped, this produced three permanently
+      # red PRs (#3, #5, #6) that no amount of individual fixing could turn green — see #12.
+      #
+      # `shake` is listed because sha3 0.12 removed SHAKE and moved it to that crate, and
+      # PeerId = SHAKE-256(pk)[..32] is the definition of peer identity here. It arrives with
+      # this stack or not at all.
+      digest-stack:
+        patterns:
+          - "sha2"
+          - "sha3"
+          - "hkdf"
+          - "hmac"
+          - "digest"
+          - "shake"
+
+      # Group patch/minor bumps to reduce PR noise; security updates still come
+      # through individually.
       minor-and-patch:
         update-types:
           - minor
