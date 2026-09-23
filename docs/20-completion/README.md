@@ -17,7 +17,7 @@ three gates is closed, and two have not been started.
 | Gate | Layer-0 scope | Status | Completion |
 |---|---|---|---|
 | **G0** · Repository health | workspace, portability, reproducibility, secret hygiene | 🟢 **CLOSED 2026-09-23** — all four exit criteria green in CI on three architectures | 100% |
-| **G1** · Crypto core + agility registry | `(role, version)` registry, SLH-DSA-128s, KATs, hybrid KEX | 🔴 **not started** — 0 of 11 tasks | 0% |
+| **G1** · Crypto core + agility registry | `(role, version)` registry, SLH-DSA-128s, KATs, hybrid KEX | 🟦 **in progress** — C1–C5 done (the registry); C6–C11 open | ~45% |
 | **G5** · Transport | libp2p/QUIC, ML-DSA TLS certificates, live DHT, GossipSub | 🔴 **not started** — N0 spike ✅ closed; N1 blocked on an identity ADR | ~2% |
 
 > **G1 may now begin.** G0's whole purpose was to make the gates below it checkable, and it

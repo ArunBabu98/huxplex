@@ -11,6 +11,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **The algorithm-suite registry (G1 · C1–C5).** Resolution is `(role, suite version) → primitive`
+  ([ADR-0018](docs/adr/0018-signature-role-profiles.md), [crypto spec §1.1](docs/15-specifications/02-cryptography-spec.md)).
+  `SigRole` carries the five roles with discriminants **asserted equal to `KeyPurpose` at compile
+  time** — a runtime test can be deleted; a `const` assertion stops the crate compiling.
+  `SuiteVersion`, `AlgoSuite` and an append-only table complete the descriptor. Unknown roles,
+  versions and scheme identifiers all fail closed with distinct errors, and **zero is never a
+  valid identifier**, so a zeroed field cannot be mistaken for v1. 16 conformance tests cover
+  G1-T4 (green), and the structural halves of G1-T1 and G1-T6.
+- **`Signer` and `Verifier` as separate traits.** Verifying is not signing: a light client or an
+  archival verifier validating history under a retired suite must verify with no capacity to
+  sign — exactly what ADR-0018 rule V5 requires. `traits::verifier()` returns a handle that
+  cannot sign, making the absence of that capability a type-level fact rather than a review
+  comment. (`Kem`/`Hasher` are deliberately deferred: each has one candidate implementation
+  today, and a trait written against one implementation encodes its shape.)
+- **`scripts/check-primitive-encapsulation.sh` (G1 · C4)** — fails if any Rust source names
+  `libcrux_ml_dsa` or `libcrux_ml_kem` outside its single designated module. In CI and
+  `verify-layer0.sh`, and **verified to fail on an injected violation**, not merely to pass on a
+  clean tree. The agility thesis is that no layer above the registry knows its algorithm; one
+  direct call falsifies it, and looks like ordinary working code in review.
 - Repository engineering scaffolding: `LICENSE` (Apache-2.0), `NOTICE`, `SECURITY.md`,
   `CODE_OF_CONDUCT.md`, this changelog, lint/toolchain config (`rustfmt.toml`, `clippy.toml`,
   `deny.toml`, `rust-toolchain.toml`), and CI (`.github/workflows/`).

@@ -48,7 +48,7 @@ finished.
 | Domain-separated context strings | 🟢 implemented | ✅ yes |
 | Secret hygiene (redaction, zeroize, constant-time) | 🟢 implemented | ✅ yes |
 | `PeerId`, signed gossip and DHT envelopes | 🟢 implemented | ✅ yes |
-| **Algorithm agility registry** | 🟡 gate **G1** | ❌ not yet |
+| **Algorithm agility registry** | 🟢 implemented (G1 C1–C5) | ✅ yes — `cargo test -p hux-crypto --test suite_registry` |
 | **SLH-DSA-128s** | 🟡 gate **G1** | ❌ not yet (24 tests are `#[ignore]`d) |
 | **QUIC transport, TLS with ML-DSA certs, live DHT, GossipSub** | 🟡 gate **G5** | ❌ not yet |
 | Consensus, state, VM, tokens, agents | 🟡 later gates | ❌ not yet |
@@ -66,10 +66,11 @@ them — audited, with the commands behind every claim — see
 | Formatting is canonical | The tree matches `rustfmt.toml` | Diff noise hides real changes in security-critical code |
 | No clippy lints | `-D warnings` across all targets and features | A warning tolerated once is a warning ignored forever |
 | Crate layering is downward-only | `hux-network → hux-crypto`, never upward | Layering is what keeps the crypto crate independently auditable and exportable ([repository-structure](../10-development/repository-structure.md)) |
+| Registry is the only primitive path | No vendor crate (`libcrux_ml_dsa`, `libcrux_ml_kem`) is named outside its one designated module | The agility thesis is that no layer above the registry knows its algorithm. One direct call falsifies it, and looks like ordinary code in review |
 | No arch-specific backend paths | No `::avx2::`, `::neon::`, `::simd256::`, `::simd128::` call in any Rust source | Hardcoding one backend excludes an entire architecture from the validator set. This is the break that started G0 |
 | Arch guard catches a regression | On aarch64, an injected `mlkem768::avx2::*` call is **rejected** by the compiler | A check that can only pass proves nothing. This one is verified by deliberately breaking the tree |
 | Workspace builds | `--locked`, so the committed `Cargo.lock` is honoured | A build that silently resolves different dependencies is not the build we tested |
-| Test suite | **117 tests pass, 81 correctly ignored** | Every ignored test names the gate that un-ignores it (G0-T3) |
+| Test suite | **133 tests pass, 81 correctly ignored** | Every ignored test names the gate that un-ignores it (G0-T3) |
 | Docs build without warnings | `RUSTDOCFLAGS=-D warnings` | Broken intra-doc links mean the reasoning trail is rotting |
 | Crypto walkthrough | The seven properties in [`01-crypto.md`](01-crypto.md) | Demonstration you can read, not just a green tick |
 | Network walkthrough | The six properties in [`02-network.md`](02-network.md) | Same |

@@ -1,11 +1,8 @@
-use libcrux_ml_dsa::ml_dsa_44;
 use rand::Rng;
 
 use crate::{
-    error::{CryptoError, CryptoResult},
-    privatekey::PrivateKey,
-    publickey::PublicKey,
-    signaturescheme::SignatureSchemeId,
+    error::CryptoResult, privatekey::PrivateKey, publickey::PublicKey, sig::ml_dsa,
+    signaturescheme::SignatureSchemeId, traits,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -20,19 +17,18 @@ pub struct Keypair {
 }
 
 impl Keypair {
+    /// Generates a keypair for `scheme` from a 32-byte seed.
+    ///
+    /// Dispatches through the registry's trait rather than matching on the scheme, so adding a
+    /// scheme is a registry row plus an implementation — never an edit here (G1 tasks C4, C6).
     pub fn generate(scheme: SignatureSchemeId, seed: [u8; 32]) -> CryptoResult<Self> {
-        match scheme {
-            SignatureSchemeId::Dilithium2 => {
-                let keypair = ml_dsa_44::generate_key_pair(seed);
-                Ok(Keypair {
-                    publickey: PublicKey {
-                        scheme: scheme.clone(),
-                        bytes: keypair.verification_key.as_ref().to_vec(),
-                    },
-                    privatekey: PrivateKey::new(scheme, keypair.signing_key.as_ref().to_vec()),
-                })
-            }
-        }
+        let implementation = traits::implementation(scheme)?;
+        let (pk, sk) = implementation.generate(&seed)?;
+
+        Ok(Keypair {
+            publickey: PublicKey { scheme, bytes: pk },
+            privatekey: PrivateKey::new(scheme, sk),
+        })
     }
 
     pub fn public_key(&self) -> &PublicKey {
@@ -44,25 +40,23 @@ impl Keypair {
     }
 
     pub fn sign(&self, message: &[u8], context: Option<&[u8]>) -> CryptoResult<Signature> {
-        let sk_bytes: [u8; 2560] = self
-            .private_key()
-            .expose_secret()
-            .try_into()
-            .map_err(|e| CryptoError::InvalidSecretKeySize(format!("{:?}", e)))?;
+        let scheme = self.public_key().scheme;
+        let implementation = traits::implementation(scheme)?;
 
-        let signing_key = ml_dsa_44::MLDSA44SigningKey::new(sk_bytes);
+        // Per-signature randomness from the system CSPRNG. Deterministic lattice signing plus
+        // fault injection is a demonstrated key-recovery path (eprint 2025/2009), so hedging is
+        // mandatory, not optional. G1 task C9 moves the deterministic path behind a separate
+        // test-only entry point so no caller can supply this value.
+        let mut randomness = [0u8; ml_dsa::SIGNING_RANDOMNESS_LEN];
+        rand::rng().fill_bytes(&mut randomness);
 
-        let mut randomness = [0u8; 32];
-        let mut rng = rand::rng();
-        rng.fill_bytes(&mut randomness);
-        let ctx_bytes = context.unwrap_or(&[]);
+        let bytes = implementation.sign(
+            self.private_key().expose_secret(),
+            message,
+            context.unwrap_or(&[]),
+            &randomness,
+        )?;
 
-        let sig_obj = ml_dsa_44::sign(&signing_key, message, ctx_bytes, randomness)
-            .map_err(|e| CryptoError::SigningFailed(format!("{:?}", e)))?;
-
-        Ok(Signature {
-            scheme: self.public_key().scheme.clone(),
-            bytes: sig_obj.as_ref().to_vec(),
-        })
+        Ok(Signature { scheme, bytes })
     }
 }

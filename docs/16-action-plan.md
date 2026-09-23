@@ -24,7 +24,7 @@ Verified by reading `src/` and running the test suite, not by reading docs.
 |---|---|
 | ~1,200 lines of implementation across `crates/hux-crypto/src/` and `crates/hux-network/src/` | `wc -l crates/*/src/*.rs` |
 | ~4,800 lines of **tests** across `crates/*/tests/` and co-located gated suites | `wc -l crates/*/tests/*.rs` |
-| **Build is green** — **117 passed, 0 failed, 81 ignored** on **three architectures**; reproducible release builds verified | `./scripts/verify-layer0.sh --full` locally (12/12), and the CI matrix on `x86_64` / `aarch64` / `arm64`. Walkthrough output is byte-identical across all three |
+| **Build is green** — **133 passed, 0 failed, 81 ignored** on **three architectures**; reproducible release builds verified | `./scripts/verify-layer0.sh --full` locally (12/12), and the CI matrix on `x86_64` / `aarch64` / `arm64`. Walkthrough output is byte-identical across all three |
 | 81 ignored tests are conformance suites for four unimplemented primitives | `slh_dsa` 22 (G1), `lb_vrf` 17 + `pq_ssle` 16 (G6+), `zk_stark` 26 (G10) — each `#[ignore]` names its gate |
 | No ledger, no consensus, no VM, no storage, no transport, no tokens, no agents | absence across `crates/` |
 | Connectors are now specified but unbuilt | [07-connector-protocol](15-specifications/07-connector-protocol.md), [ADR-0015](adr/0015-connector-architecture.md), [ADR-0016](adr/0016-evidence-and-attestation.md) |

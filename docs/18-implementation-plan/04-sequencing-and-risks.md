@@ -108,7 +108,7 @@ Work stops and a decision returns to the architect if:
 | | Criterion | Status (2026-09-23) |
 |---|---|---|
 | **G0** | Workspace split; dual-architecture CI green; reproducible builds demonstrated by an automated two-build comparison; no secret printable via `Debug` | 🟢 **CLOSED 2026-09-23** — all four, green in CI on three architectures |
-| **G1** | Registry is the only path to a primitive; SLH-DSA green with its tests un-ignored; KATs byte-exact on both architectures; **G1-T1** and **G1-T6** green | 🔴 not started — 0 of 11 tasks |
+| **G1** | Registry is the only path to a primitive; SLH-DSA green with its tests un-ignored; KATs byte-exact on both architectures; **G1-T1** and **G1-T6** green | 🟦 C1–C5 done — the registry is the only path to a primitive, enforced by CI. C6–C11 open |
 | **G5** | 5 nodes mutually authenticate over QUIC with ML-DSA certificates, discover via Kademlia, gossip under 20% loss; **G5-T6** and **G5-T7** green | 🔴 not started — N0 ✅ closed (quinn direct); N1 blocked on an identity ADR |
 
 > This table is the definition of the term. The audit measuring against it, with the commands

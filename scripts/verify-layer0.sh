@@ -55,6 +55,7 @@ run "Formatting is canonical"           cargo fmt --all --check
 run "No clippy lints"                   cargo clippy --all-targets --all-features -- -D warnings
 run "Crate layering is downward-only"   ./scripts/check-layering.sh
 run "No arch-specific backend paths"    ./scripts/check-arch-portability.sh
+run "Registry is the only primitive path" ./scripts/check-primitive-encapsulation.sh
 run "Workspace builds"                  cargo build --all-targets --all-features --locked
 run "Test suite"                        cargo test --all-targets --all-features --locked
 run "Doctests"                          cargo test --doc --all-features --locked
