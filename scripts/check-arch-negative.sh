@@ -36,8 +36,23 @@ echo "  staging at : $TMP"
 # Copy the WORKING TREE (not HEAD) so an uncommitted regression is caught too.
 tar -cf - --exclude='./target' --exclude='./.git' . | (cd "$TMP" && tar -xf -)
 
+TARGET="crates/hux-crypto/src/kem/ml_kem.rs"
+
+# The injection target must already exist. `cat >>` would otherwise happily CREATE it, the file
+# would not be part of any module, the build would succeed, and this script would report "the
+# injected call COMPILED" — blaming the guarantee for what is really a stale path after a
+# refactor. Fail with the true cause instead.
+if [[ ! -f "$TMP/$TARGET" ]]; then
+  echo "FAIL  injection target $TARGET does not exist."
+  echo
+  echo "      The module was probably moved or renamed. Update TARGET in this script to wherever"
+  echo "      libcrux_ml_kem is now called; scripts/check-primitive-encapsulation.sh names the"
+  echo "      single file permitted to do so."
+  exit 1
+fi
+
 # The injection: the original G0 break, verbatim in shape.
-cat >> "$TMP/crates/hux-crypto/src/kem.rs" <<'RUST'
+cat >> "$TMP/$TARGET" <<'RUST'
 
 // Injected by scripts/check-arch-negative.sh. MUST NOT COMPILE on aarch64.
 pub fn g0_negative_case_probe(randomness: [u8; 64]) -> [u8; EK_SIZE] {
@@ -47,7 +62,7 @@ pub fn g0_negative_case_probe(randomness: [u8; 64]) -> [u8; EK_SIZE] {
 }
 RUST
 
-echo "  injected   : mlkem768::avx2::generate_key_pair in crates/hux-crypto/src/kem.rs"
+echo "  injected   : mlkem768::avx2::generate_key_pair in $TARGET"
 echo
 
 # Separate target dir: keeps this check's artifacts out of the main build's fingerprints.

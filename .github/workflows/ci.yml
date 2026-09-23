@@ -45,6 +45,10 @@ jobs:
         # docs/16-action-plan.md § G0 standing rule. Proves nobody WROTE the call; the
         # negative case in the test matrix proves the build would NOTICE if they did.
         run: ./scripts/check-arch-portability.sh
+      - name: Suite registry is the only path to a primitive (G1 · C4)
+        # The agility thesis is that no layer above the registry knows its algorithm.
+        # One direct vendor call falsifies it, and looks like ordinary code in review.
+        run: ./scripts/check-primitive-encapsulation.sh
 
   test:
     name: test (${{ matrix.arch }})

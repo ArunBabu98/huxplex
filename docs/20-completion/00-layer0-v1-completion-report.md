@@ -20,7 +20,7 @@ Layer 0 is complete when **G0**, **G1** and **G5** have all closed. Measured aga
 | | Criterion (verbatim from that table) | Reality | |
 |---|---|---|---|
 | **G0** | Workspace split; dual-architecture CI green; reproducible builds demonstrated by an automated two-build comparison; no secret printable via `Debug` | Workspace ✅ · reproducibility ✅ · `Debug` ✅ · **CI green on three architectures** ✅ | 🟢 **CLOSED** |
-| **G1** | Registry is the only path to a primitive; SLH-DSA green with 24 tests un-ignored; KATs byte-exact on both architectures; G1-T1 and G1-T6 green | No registry, no SLH-DSA, no KAT fixtures, no role dimension in code. 0 of 11 tasks | 🔴 |
+| **G1** | Registry is the only path to a primitive; SLH-DSA green with 24 tests un-ignored; KATs byte-exact on both architectures; G1-T1 and G1-T6 green | Registry ✅ and mechanically enforced (C1–C5). Still no SLH-DSA, no KAT fixtures, no hybrid KEX. 5 of 11 tasks | 🟦 |
 | **G5** | 5 nodes mutually authenticate over QUIC with ML-DSA certificates, discover via Kademlia, gossip under 20% loss; G5-T6 and G5-T7 green | No transport, no swarm, no TLS, no peer state machine. N0 spike ✅ closed 2026-09-23 (answer: drive quinn directly); N1 blocked on an identity ADR | 🔴 |
 
 One gate closed, two untouched. **Roughly one third of Layer 0 exists.**
@@ -38,7 +38,7 @@ G3 (ledger), G4 (execution), G6 (consensus) and G7 (devnet) have no code whatsoe
 |---|---|---|
 | Full local harness | `./scripts/verify-layer0.sh` | **12/12 PASS** — fmt, clippy `-D warnings`, layering, arch-portability guard, build `--locked`, tests, doctests, docs, both walkthroughs, determinism re-run, arch negative case. (9/9 at audit time; G0-8 added three.) |
 | Reproducible build (G0-T2) | `./scripts/check-reproducible.sh` | **PASS** — `libhux_crypto.rlib` `5e495a84…b5a0` and `libhux_network.rlib` `334fb745…2957` identical across two independent clean copies |
-| Test suite | `cargo test --all-targets --all-features --locked` | **117 passed · 0 failed · 81 ignored** (hux-crypto 76 + 81 ignored; hux-network 41). Was 115 at audit time; the DHT field-framing fix (§5.1) added two |
+| Test suite | `cargo test --all-targets --all-features --locked` | **133 passed · 0 failed · 81 ignored**. Was 115 at audit time: the DHT field-framing fix (§5.1) added two, the G1 registry suite added sixteen |
 | Gate labels (G0-T3) | `grep -rn '#\[ignore' crates/` | **81/81 labelled** — `GATE: G1` ×22, `GATE: G6+` ×33, `GATE: G10` ×26 |
 | Supply chain | `cargo deny check advisories licenses bans sources` | **ok** — one documented, owned, dated advisory exception (`RUSTSEC-2026-0173`) |
 | Second architecture (local) | `cargo test --all-features --locked --target x86_64-apple-darwin` | **115 passed** — but see §3.2, this is Rosetta and it proves less than it appears to |

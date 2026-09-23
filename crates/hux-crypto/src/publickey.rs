@@ -1,9 +1,9 @@
 // crates/hux-crypto/src/publickey.rs
 use crate::{
     error::{CryptoError, CryptoResult},
-    sig::ml_dsa,
     signature::Signature,
     signaturescheme::SignatureSchemeId,
+    traits,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -13,28 +13,32 @@ pub struct PublicKey {
 }
 
 impl PublicKey {
-    /// Verify a signature against this public key with an optional context
+    /// Verify a signature against this public key with an optional context.
+    ///
+    /// Dispatches through the registry's trait, so no scheme is named here (G1 task C4) and no
+    /// size literal appears (C6) — both come from the resolved implementation.
     pub fn verify(
         &self,
         message: &[u8],
         signature: &Signature,
         context: Option<&[u8]>,
     ) -> CryptoResult<bool> {
-        // 1. Scheme compatibility check
+        // Scheme compatibility. Checked before dispatch so a mismatch is reported as itself
+        // rather than surfacing as a length error from whichever scheme happened to be resolved.
         if self.scheme != signature.scheme {
             return Err(CryptoError::SchemeMismatch {
-                expected: self.scheme.clone(),
-                actual: signature.scheme.clone(),
+                expected: self.scheme,
+                actual: signature.scheme,
             });
         }
 
-        // 2. Resolve the context (default to empty slice)
-        let ctx_bytes = context.unwrap_or(&[]);
+        let implementation = traits::implementation(self.scheme)?;
 
-        match self.scheme {
-            SignatureSchemeId::Dilithium2 => {
-                ml_dsa::verify(&self.bytes, message, ctx_bytes, &signature.bytes)
-            }
-        }
+        implementation.verify(
+            &self.bytes,
+            message,
+            context.unwrap_or(&[]),
+            &signature.bytes,
+        )
     }
 }

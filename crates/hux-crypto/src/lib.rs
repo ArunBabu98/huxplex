@@ -14,6 +14,8 @@ pub mod privatekey;
 pub mod publickey;
 pub mod signature;
 pub mod signaturescheme;
+pub mod suite;
+pub mod traits;
 
 /// Raw primitives. These modules are the **only** places permitted to name a vendor crate
 /// (`libcrux_ml_dsa`, `libcrux_ml_kem`); everything above reaches them through the suite
