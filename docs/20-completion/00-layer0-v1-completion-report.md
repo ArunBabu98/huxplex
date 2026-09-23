@@ -21,7 +21,7 @@ Layer 0 is complete when **G0**, **G1** and **G5** have all closed. Measured aga
 |---|---|---|---|
 | **G0** | Workspace split; dual-architecture CI green; reproducible builds demonstrated by an automated two-build comparison; no secret printable via `Debug` | Workspace ✅ · reproducibility ✅ · `Debug` ✅ · **CI green on three architectures** ✅ | 🟢 **CLOSED** |
 | **G1** | Registry is the only path to a primitive; SLH-DSA green with 24 tests un-ignored; KATs byte-exact on both architectures; G1-T1 and G1-T6 green | No registry, no SLH-DSA, no KAT fixtures, no role dimension in code. 0 of 11 tasks | 🔴 |
-| **G5** | 5 nodes mutually authenticate over QUIC with ML-DSA certificates, discover via Kademlia, gossip under 20% loss; G5-T6 and G5-T7 green | No transport, no swarm, no TLS, no peer state machine. The entry spike (N0) has not been run | 🔴 |
+| **G5** | 5 nodes mutually authenticate over QUIC with ML-DSA certificates, discover via Kademlia, gossip under 20% loss; G5-T6 and G5-T7 green | No transport, no swarm, no TLS, no peer state machine. N0 spike ✅ closed 2026-09-23 (answer: drive quinn directly); N1 blocked on an identity ADR | 🔴 |
 
 One gate closed, two untouched. **Roughly one third of Layer 0 exists.**
 
@@ -310,11 +310,25 @@ Its entire dependency set is `hux-crypto`, `thiserror`, `sha2`, `sha3`, `hex`. T
 is no swarm, no transport, no certificate code, no peer state machine, no live Kademlia and no
 GossipSub.
 
-**N0, the entry spike, has not been run.** It is the explicitly-first task of the gate — *does
-`libp2p-quic` accept a custom rustls configuration carrying an ML-DSA-44 certificate?* — and its
-answer determines how much of G5 is integration versus implementation, and in the worst case which
-crates are dependencies at all. No finding is recorded in
+**N0, the entry spike, is ✅ closed (2026-09-23).** Full finding in
 [`18-implementation-plan/03-g5-transport.md`](../18-implementation-plan/03-g5-transport.md).
+Answer: **outcome 3 — quinn must be driven behind libp2p's `Transport` trait.**
+
+- `libp2p_quic::Config` keeps its TLS configs in **private fields with no setter**, built
+  internally from `libp2p_tls::make_*_config`. No injection point exists.
+- The "small `libp2p-tls` fork" fails for an unexpected reason: those functions take
+  `&libp2p_identity::Keypair`, and `KeyType` is `{Ed25519, RSA, Secp256k1, Ecdsa}` — **an ML-DSA
+  key cannot travel through that signature.** The fork cascades into `libp2p-identity`, which owns
+  `PeerId` encoding and the protobuf key format.
+- ✅ **ADR-0019's load-bearing assumption is confirmed at the source:** rustls 0.23.45 defines
+  `ML_DSA_44 => 0x0904` (matching the ADR exactly) and wires it through `aws_lc_rs` — already the
+  provider libp2p-tls uses. The cryptography is available; only the plumbing is closed. **The stop
+  condition was not reached.**
+- ⚠️ **Deeper finding, outside the spike's original framing:** libp2p-core hands the swarm
+  `(PeerId, StreamMuxerBox)` using **libp2p's** `PeerId` — a multihash over a protobuf Ed25519-class
+  key — while Huxplex's is `SHAKE-256(ML-DSA-44 pk)[..32]` (G5-T2). Reconciling the two is an
+  **ADR-level decision that blocks N1**, not an implementation detail.
+- G5 now activates **G0-7**, the C-toolchain pin, since `aws-lc-rs` enters the tree with it.
 
 | Test | Status |
 |---|---|
