@@ -19,7 +19,7 @@ jobs:
     name: rustfmt
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install toolchain (from rust-toolchain.toml)
         run: rustup show
       - run: cargo fmt --all --check
@@ -28,7 +28,7 @@ jobs:
     name: clippy
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: rustup show
       - uses: Swatinem/rust-cache@v2
       - run: cargo clippy --all-targets --all-features -- -D warnings
@@ -37,7 +37,7 @@ jobs:
     name: static gates (layering, arch portability)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Enforce the dependency rule
         # docs/10-development/repository-structure.md — a cycle is a build failure.
         run: ./scripts/check-layering.sh
@@ -60,7 +60,7 @@ jobs:
           - { os: ubuntu-24.04-arm, arch: aarch64 }
           - { os: macos-latest,   arch: aarch64-darwin }
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: rustup show
       - uses: Swatinem/rust-cache@v2
       - name: Report architecture
@@ -87,7 +87,7 @@ jobs:
     name: reproducible build (G0-T2)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: rustup show
       - uses: Swatinem/rust-cache@v2
       - name: Two clean checkouts must produce byte-identical artifacts
@@ -101,7 +101,7 @@ jobs:
     env:
       RUSTDOCFLAGS: -D warnings
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: rustup show
       - uses: Swatinem/rust-cache@v2
       - run: cargo doc --no-deps --all-features
