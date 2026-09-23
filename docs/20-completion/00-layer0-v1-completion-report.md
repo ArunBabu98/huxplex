@@ -1,0 +1,299 @@
+# 00 — Layer 0 / v1 completion report
+
+> **Audit date:** 2026-09-23 · **Commit:** `63ad3d5` · **Branch:** `layer0/g0-workspace-and-verification`
+> **Host:** `aarch64-apple-darwin` (Apple M4), rustc 1.85.0 (pinned)
+>
+> Method: run the tree, read the source, query CI. Every ✅ and ❌ below has a command behind it.
+> Where this report and the blueprint disagree, this report is describing what happened and the
+> blueprint is describing what was intended.
+
+---
+
+## 1. Verdict
+
+**Layer 0 for v1 is NOT complete.**
+
+The project's own definition of the term is the three-row table in
+[`18-implementation-plan/04-sequencing-and-risks.md`](../18-implementation-plan/04-sequencing-and-risks.md#what-layer-0-complete-means):
+Layer 0 is complete when **G0**, **G1** and **G5** have all closed. Measured against it:
+
+| | Criterion (verbatim from that table) | Reality | |
+|---|---|---|---|
+| **G0** | Workspace split; dual-architecture CI green; reproducible builds demonstrated by an automated two-build comparison; no secret printable via `Debug` | Workspace ✅ · reproducibility ✅ · `Debug` ✅ · **dual-architecture CI has never run** ❌ | 🟦 |
+| **G1** | Registry is the only path to a primitive; SLH-DSA green with 24 tests un-ignored; KATs byte-exact on both architectures; G1-T1 and G1-T6 green | No registry, no SLH-DSA, no KAT fixtures, no role dimension in code. 0 of 11 tasks | 🔴 |
+| **G5** | 5 nodes mutually authenticate over QUIC with ML-DSA certificates, discover via Kademlia, gossip under 20% loss; G5-T6 and G5-T7 green | No transport, no swarm, no TLS, no peer state machine. The entry spike (N0) has not been run | 🔴 |
+
+One gate near-closed, two untouched. **Roughly one third of Layer 0 exists.**
+
+A second, wider reading of the question — *is v1 complete?* — resolves the same way and more
+emphatically: v1 is the 3–5 node devnet of
+[`15-specifications/06-v1-scope.md`](../15-specifications/06-v1-scope.md), and gates G2 (encoding),
+G3 (ledger), G4 (execution), G6 (consensus) and G7 (devnet) have no code whatsoever. See §6.
+
+---
+
+## 2. Evidence: what was run, and what it produced
+
+| Check | Command | Result |
+|---|---|---|
+| Full local harness | `./scripts/verify-layer0.sh` | **9/9 PASS** — fmt, clippy `-D warnings`, layering, build `--locked`, tests, docs, both walkthroughs, determinism re-run |
+| Reproducible build (G0-T2) | `./scripts/check-reproducible.sh` | **PASS** — `libhux_crypto.rlib` `5e495a84…b5a0` and `libhux_network.rlib` `334fb745…2957` identical across two independent clean copies |
+| Test suite | `cargo test --all-features --locked` | **115 passed · 0 failed · 81 ignored** (hux-crypto 76 + 81 ignored; hux-network 39) |
+| Gate labels (G0-T3) | `grep -rn '#\[ignore' crates/` | **81/81 labelled** — `GATE: G1` ×22, `GATE: G6+` ×33, `GATE: G10` ×26 |
+| Supply chain | `cargo deny check advisories licenses bans sources` | **ok** — one documented, owned, dated advisory exception (`RUSTSEC-2026-0173`) |
+| Second architecture | `cargo test --all-features --locked --target x86_64-apple-darwin` | **115 passed** — but see §3.2, this is Rosetta and it proves less than it appears to |
+| CI history | `gh run list --branch layer0/g0-workspace-and-verification` | **empty — zero runs** |
+
+### 2.1 Corrected figures
+
+The suite is **115 / 0 / 81**, not the **112 / 0 / 84** recorded throughout `/docs`. The
+difference is exactly commit `63ad3d5`, *"un-ignore three vacuously-gated tests"*, which moved
+three size-constant assertions out of the ignored set. Every affected document is corrected as
+part of this audit; the list is in [`01-outstanding-work.md` §5](01-outstanding-work.md).
+
+---
+
+## 3. G0 · Repository health — 🟦 near-closed, two items open
+
+Everything G0 was written to fix has been fixed, and fixed well. What has not happened is the
+*proof* — and G0's whole thesis is that an unproven claim about portability is how the repository
+broke in the first place.
+
+### 3.1 The blocking finding: CI cannot run on this branch
+
+[`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) triggers on:
+
+```yaml
+on:
+  push:
+    branches: [master]
+  pull_request:
+```
+
+The Layer-0 work is five commits on `layer0/g0-workspace-and-verification`. The branch is pushed
+to `origin`. **No pull request exists for it.** Therefore neither trigger fires, and `gh run list`
+for the branch returns nothing. The newest `CI` run of any kind is **2026-09-12** — before commit
+`8dbc640` created the workspace.
+
+The practical consequences, all of which read as "configured" in the current docs:
+
+- the **architecture matrix** (`ubuntu-latest` / `ubuntu-24.04-arm` / `macos-latest`) has never executed;
+- the **layering gate** (`scripts/check-layering.sh`) has never executed in CI;
+- the **reproducible-build job** has never executed in CI;
+- the **`Security` workflow** (cargo-deny) has likewise not run against the workspace lockfile — its
+  last run, 2026-09-21, was the weekly schedule against `master`, which predates the split.
+  *(It passes locally; see §2. But CI has not confirmed it.)*
+
+This is not a code defect. It is the gap between "wired" and "ran", which is precisely the
+distinction G0 exists to enforce — standing rule #1 of
+[`16-action-plan.md`](../16-action-plan.md#4-standing-rules): *a gate is done when its
+high-concept tests pass in CI, not when the code is written.*
+
+**Fix:** open a PR for the branch (or add the branch pattern to the `push` trigger). Five minutes
+of work converts the largest open question in G0 into a result.
+
+### 3.2 The x86-64 evidence is weaker than it looks
+
+This audit ran the full suite against the `x86_64-apple-darwin` target on an Apple M4 — 115 tests
+passed, identical to the native aarch64 run. That is encouraging and it is **not** G0-T1.
+
+Probing the translated environment directly:
+
+```
+avx2   = false
+avx    = false
+sse4.2 = true
+```
+
+Rosetta 2 does not expose AVX2 on this host, so libcrux's multiplexing dispatcher fell back to the
+**portable** backend. The `simd256` feature that
+[`crates/hux-crypto/Cargo.toml`](../../crates/hux-crypto/Cargo.toml) enables for
+`cfg(target_arch = "x86_64")` was compiled but never executed.
+
+So the run establishes that the x86-64 target *compiles and passes with portable dispatch*. It
+establishes nothing about the AVX2 path — which is the exact code path whose absence on aarch64
+caused the original G0 break. **Native x86-64 hardware remains unproven**, and only the CI matrix
+can prove it.
+
+### 3.3 G0 item-by-item
+
+| Item | Claim in docs | Verified | Note |
+|---|---|---|---|
+| 1 · ML-KEM backend dispatch | ✅ | ✅ | `kem.rs` calls only `mlkem768::{generate_key_pair,encapsulate,decapsulate}` — no backend path anywhere in the tree |
+| 2 · Four phantom modules | ✅ | ✅ | `slh_dsa`/`lb_vrf`/`pq_ssle`/`zk_stark` are `#[cfg(test)]` in `lib.rs`; unreachable from the public API |
+| 3 · `E0121` placeholder | ✅ | ✅ | compiles clean |
+| 4 · Split the 3,607-line module | ✅ | ✅ | `hux-crypto/src/lib.rs` is 36 lines; suites in `crates/*/tests/` |
+| 5 · **CI on both architectures** | 🟦 configured | ❌ **never ran** | §3.1 |
+| 6 · `pub mod` + `forbid(unsafe_code)` | ✅ | ✅ | workspace lint, 0 warnings |
+| 7 · `PeerId` short-read | ✅ | ✅ | `XofReader::read` in `peer.rs`, with the reasoning in a comment |
+| 8 · Workspace split | ✅ | ✅ | two crates, downward-only layering, gate script passes |
+| 9 · `PrivateKey` secret leak | ✅ | ✅ | redacted `Debug`, `ZeroizeOnDrop`, constant-time `Eq`, `expose_secret()` |
+| 10 · C-toolchain pin | ⏸️ deferred to G5 | ⏸️ **correctly deferred** | `aws-lc-rs` is genuinely not in the tree; pinning now would mix two variables in the G0-T2 baseline |
+
+| Gate test | Status | Evidence |
+|---|---|---|
+| **G0-T1** — compiles and passes on x86-64 **and** aarch64 | 🟦 **open** | aarch64 native ✅ · x86-64 only under Rosetta with portable dispatch (§3.2) · CI matrix never ran (§3.1) |
+| **G0-T1 negative case** — a deliberate `avx2::` call must *fail* the aarch64 job | ❌ **not written** | No such test or CI step exists. A matrix that can only pass does not prove it would catch the regression it was built for |
+| **G0-T2** — reproducible builds | ✅ **green** | Byte-identical `.rlib`s, re-verified today. Baseline is pure-Rust; must be re-run when `aws-lc-rs` lands |
+| **G0-T3** — every ignore names its gate | ✅ **green** | 81/81 |
+
+**G0 is one PR and one negative test away from closing.** Nothing about it is hard; it is simply
+not done.
+
+---
+
+## 4. G1 · Crypto core and the agility registry — 🔴 not started
+
+Zero of the eleven tasks C1–C11 in
+[`18-implementation-plan/02-g1-crypto-core.md`](../18-implementation-plan/02-g1-crypto-core.md)
+have been begun. The planned shape (`suite/`, `traits.rs`, `sig/`, `kem/`, `hash/`) does not exist
+on disk; `crates/hux-crypto/src/` still holds the flat pre-G1 module set.
+
+### 4.1 What the source actually shows
+
+**There is no registry, and no role dimension in code.**
+[`signaturescheme.rs`](../../crates/hux-crypto/src/signaturescheme.rs) is four lines with a single
+variant:
+
+```rust
+pub enum SignatureSchemeId { Dilithium2 }
+```
+
+Dispatch is a `match` inlined at each call site in `signature.rs` and `publickey.rs`. There is no
+`AlgoSuite`, no `SigRole`, no `(role, version) → primitive` resolution, no append-only table, and
+no trait boundary — so **every primitive is reached by a direct call to a named scheme**, which is
+the precise condition C4 exists to forbid.
+
+`KeyPurpose` in [`bip32.rs`](../../crates/hux-crypto/src/bip32.rs) *does* carry the five roles with
+the ADR-0018 discriminants. That is the derivation half only. Nothing yet enforces that a key of
+purpose *n* may sign only under role *n*, because there is no verifier that knows what a role is.
+
+**Sizes are hard-coded**, exactly as ADR-0002 warned (C6):
+`[u8; 1312]` and `[u8; 2420]` in `publickey.rs`, `[u8; 2560]` in `signature.rs`.
+
+**SLH-DSA-128s is unimplemented** (C7/C8). `src/slh_dsa.rs` is a `#[cfg(test)]` API contract with
+`unimplemented!()` bodies; 22 of its tests are `#[ignore]`d under `GATE: G1`. `fips205` is not a
+dependency, nor is RustCrypto `slh-dsa` as the differential oracle.
+
+**No KAT fixtures exist anywhere in the tree** (C10). There is no fixtures directory and no
+committed vectors; `grep -rn "KAT" crates/*/tests/` returns nothing. G1-T3 therefore cannot be
+attempted yet.
+
+**C9 blocks C10.** `Keypair::sign` draws its 32 bytes from `rand::rng()` unconditionally and
+exposes no test-only entry point taking explicit randomness. Until the two-function split lands,
+*signature* KATs cannot be pinned at all — only keygen vectors could be.
+
+**No hybrid X25519 + ML-KEM-768 key agreement** exists (G1-T5), and no
+`libcrux` ↔ `aws-lc-rs` differential test (C11).
+
+### 4.2 Gate-test coverage today
+
+| Test | Status |
+|---|---|
+| **G1-T1** — algorithm rotation without state migration | ❌ impossible to write; nothing to rotate |
+| **G1-T2** — cross-context replay fails | 🟡 **partial** — `test_all_canonical_context_strings_are_mutually_domain_separated`, `test_mainnet_and_testnet_tx_contexts_are_domain_separated`, `test_dht_entry_cross_network_replay_fails` exist and pass. Not the exhaustive ordered-pair sweep over a registry, because there is no registry |
+| **G1-T3** — KAT byte-exactness | ❌ no fixtures |
+| **G1-T4** — unknown algorithm ID fails closed | ❌ unrepresentable: the enum has one variant, so an unknown ID cannot be constructed |
+| **G1-T5** — hybrid retains PQ security | ❌ no hybrid |
+| **G1-T6** — role confusion rejected | ❌ no roles in the verifier |
+
+One of six partially covered. **G1 has not started.**
+
+> Note the ordering hazard the plan itself flags: G2 freezes canonical encoding
+> ([ADR-0011](../adr/0011-canonical-serialization.md)), so anything wrong about the
+> `(role, version)` descriptor's *shape* after that point is a state migration rather than a
+> parameter change. G1 is the gate with a closing window.
+
+---
+
+## 5. G5 · Transport — 🔴 not started
+
+`hux-network` is **five source files, 183 lines**: `peer.rs` (PeerId), `topic.rs` (topic strings
+and context derivation), `message.rs` (`GossipMessage`, `DhtEntry`), `error.rs`, and a 10-line
+`lib.rs` of module declarations.
+
+Its entire dependency set is `hux-crypto`, `thiserror`, `sha2`, `sha3`, `hex`. There is **no
+`libp2p`, no `quinn`, no `rustls`, no `aws-lc-rs`, no `tokio`** anywhere in the workspace. There
+is no swarm, no transport, no certificate code, no peer state machine, no live Kademlia and no
+GossipSub.
+
+**N0, the entry spike, has not been run.** It is the explicitly-first task of the gate — *does
+`libp2p-quic` accept a custom rustls configuration carrying an ML-DSA-44 certificate?* — and its
+answer determines how much of G5 is integration versus implementation, and in the worst case which
+crates are dependencies at all. No finding is recorded in
+[`18-implementation-plan/03-g5-transport.md`](../18-implementation-plan/03-g5-transport.md).
+
+| Test | Status |
+|---|---|
+| **G5-T1** — authenticated handshake, no downgrade | ❌ no handshake |
+| **G5-T2** — `PeerId` bound to the key | 🟡 **struct-level only** — 7 tests in `peer_identity.rs` prove the derivation; nothing proves it over a live connection |
+| **G5-T3** — gossip amplification bounded | ❌ no peer scoring, no rate limits, no live gossip |
+| **G5-T4** — propagation under partition | ❌ no network to partition |
+| **G5-T5** — signed DHT entries reject forgery and replay | 🟡 **struct-level only** — forgery, tamper and cross-network replay are all tested on the struct; there is no DHT |
+| **G5-T6** — QUIC 3× amplification limit respected | ❌ no wire |
+| **G5-T7** — transport ≠ protocol signatures | ❌ no TLS layer |
+
+Two of seven partially covered, both at the type level. The honest summary — which
+[`19-verification/02-network.md`](../19-verification/02-network.md) already states plainly — is
+that `hux-network` today is **the cryptographic half of the network and none of the network**.
+
+---
+
+## 6. The wider v1 — for completeness
+
+Layer 0 is the floor of v1, not v1. Against the Definition of Done in
+[`15-specifications/06-v1-scope.md`](../15-specifications/06-v1-scope.md) §2:
+
+| Area | Checked | Reality |
+|---|---|---|
+| Cryptography & encoding | 3 of 6 | ML-DSA-44, ML-KEM-768 + HKDF, BIP32 ✅. KATs ❌, canonical `Codec` ❌, hash domains ❌ |
+| Ledger & execution | 0 of 4 | No HRM, no STF, no pruning, no `TxWeight` |
+| Consensus & networking | 0 of 5 | No Q-BFT, no signer guard, no leader selection, no transport, no devnet |
+| Economy | 0 of 3 | No staking, no fees, no SNTNC |
+| Operability & research output | 0 of 3 | No key custody, no metrics, no governance voting |
+
+**3 of 21.** Gates G2, G3, G4, G6 and G7 have no code. The exit criteria — a 24-hour 3–5 node soak,
+a published research report, a security self-review — are not approachable from here.
+
+This is not a criticism of the project. It is what
+[`00-executive-summary.md`](../00-executive-summary.md) §2 already says of itself: *"T0: primitives
+done, protocol unbuilt."* That assessment remains accurate as of this audit.
+
+---
+
+## 7. What is genuinely strong
+
+An honest completion report should not be only a list of absences. Verified today, these hold:
+
+- **The reproducibility work is real and non-obvious.** The canonical-build-path insight —
+  `--remap-path-prefix` takes the source path as its *argument*, so two paths give two `RUSTFLAGS`
+  strings, which feed `-C metadata`, which feeds symbol names — is the same solution Debian and
+  Nix reached, and it is documented with its reasoning rather than as a recipe.
+- **Secret hygiene is thorough.** Redacted `Debug`, `ZeroizeOnDrop`, constant-time equality, and a
+  test that sweeps `{:?}` *and* `{:#?}` for hex *and* decimal renderings. The constant-time test
+  checks single-bit flips at both ends — constant-time must not mean wrong.
+- **The ignored-test discipline works.** 81 ignores, 81 gate labels, zero exceptions. That
+  inventory is a more honest backlog than most issue trackers.
+- **Domain separation is tested as a property, not spot-checked.** Cross-topic, cross-shard,
+  cross-network and cross-purpose replay all have failing-by-construction tests.
+- **The documentation does not overclaim.** The executive summary, the verification README and
+  `verify-layer0.sh` itself all say Layer 0 is incomplete, unprompted. The script prints it on a
+  fully green run. That is rare and worth preserving.
+
+The gap this report documents is between **built** and **proven**, and between **primitives** and
+**Layer 0**. It is not a gap between what the docs claim and what exists.
+
+---
+
+## 8. Conclusion
+
+> Layer 0 for v1 is **not complete**. G0 is near-closed and blocked on CI that has never run; G1
+> and G5 have not started. What exists — verified green today on one architecture — is the
+> **post-quantum primitive layer**, not the Layer-0 substrate.
+
+The next action is small and disproportionately valuable: **open a pull request for
+`layer0/g0-workspace-and-verification`** so the architecture matrix, the layering gate, the
+reproducible-build job and cargo-deny execute for the first time against the workspace. Then add
+the G0-T1 negative case. Then G0 closes, and G1 may begin.
+
+Everything remaining is enumerated in [`01-outstanding-work.md`](01-outstanding-work.md).

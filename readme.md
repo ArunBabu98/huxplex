@@ -16,8 +16,9 @@ artificial agent networks.
 
 # 🔍 Verify it yourself
 
-Huxplex is at **Layer 0**: a post-quantum cryptographic and networking substrate. Not a
-blockchain yet — there is no ledger, consensus, VM or transport. What exists is small enough to
+Huxplex is **building Layer 0**: a post-quantum cryptographic and networking substrate. Not a
+blockchain yet — there is no ledger, consensus, VM or transport — and Layer 0 itself is roughly
+**one third complete** ([audited status](docs/20-completion/)). What exists is small enough to
 read in an afternoon, and checkable in under two minutes:
 
 ```bash
@@ -28,7 +29,8 @@ cargo run -p hux-network --example network_walkthrough
 
 The walkthroughs print what they are doing **and assert it**, so they are demonstrations and
 tests at once. Full guide: [`docs/19-verification/`](docs/19-verification/). Honest status of
-every component: [`docs/00-executive-summary.md`](docs/00-executive-summary.md).
+every component: [`docs/00-executive-summary.md`](docs/00-executive-summary.md). What is done,
+what is not, and what remains to be tested: [`docs/20-completion/`](docs/20-completion/).
 
 > Principle 15: *"Reproducibility and openness. Neutrality requires verifiability."* A claim you
 > cannot check is a claim you should not believe.

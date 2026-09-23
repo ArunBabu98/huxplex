@@ -23,7 +23,8 @@ conflict with an Architecture Decision Record (ADR).
 4. Builders go to [`16-action-plan.md`](16-action-plan.md) — the gated build order and the
    tests that unlock each stage — then, for the work actually in flight,
    [`18-implementation-plan/`](18-implementation-plan/). To check the foundation yourself, run
-   [`19-verification/`](19-verification/). Then [`09-roadmap/`](09-roadmap/),
+   [`19-verification/`](19-verification/); for where it actually stands against the gates, read
+   [`20-completion/`](20-completion/). Then [`09-roadmap/`](09-roadmap/),
    [`10-development/`](10-development/), [`backlog/`](backlog/), and the
    [`process/`](process/) playbooks.
 5. For competitive and research context, read [`17-landscape-2026.md`](17-landscape-2026.md).
@@ -54,6 +55,7 @@ conflict with an Architecture Decision Record (ADR).
 | [`17-landscape-2026.md`](17-landscape-2026.md) | What the rest of the world shipped by 2026 — agent payments, agent identity, intent chains, PQC, consensus, AI governance; where Huxplex aligns, rivals, and is behind |
 | [`18-implementation-plan/`](18-implementation-plan/) | **How Layer 0 gets built** — workspace migration, G0/G1/G5 task breakdown with acceptance criteria, sequencing, risks and stop conditions |
 | [`19-verification/`](19-verification/) | **How to verify Layer 0 yourself** — one-command harness, self-verifying walkthroughs, and manual check procedures for developers and contributors |
+| [`20-completion/`](20-completion/) | **Where the project actually stands** — a dated, evidence-backed audit against the gates, and the complete list of what remains to be completed and tested |
 | [`brainstorming/`](brainstorming/) | **Non-normative.** Founder's notes and ideas-in-progress, plus their reconciliation against this blueprint |
 | [`adr/`](adr/) | Architecture Decision Records |
 | [`rfc/`](rfc/) | RFC process + template |

@@ -63,7 +63,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   API, so an over-broad `pub` now shows up immediately. The four gated stub suites
   (`slh_dsa`, `lb_vrf`, `pq_ssle`, `zk_stark`) stay co-located inside their `#[cfg(test)]`
   modules — moving them to `tests/` would have required making `unimplemented!()` cryptography
-  publicly reachable. 112 tests and all 84 `GATE:`-labelled ignores unchanged throughout.
+  publicly reachable. 112 tests and all 84 `GATE:`-labelled ignores unchanged throughout (the
+  tree now stands at 115 / 81 — three vacuously-gated size assertions were un-ignored afterwards).
 - **Reproducible release builds (G0-T2)** — `scripts/check-reproducible.sh` stages two
   independent clean copies of the source, builds each at a canonical path, and compares artifact
   hashes. Runs in CI and via `verify-layer0.sh --full`. Recipe: pinned toolchain + `--locked` +
@@ -80,8 +81,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `docs/19-verification/` — how a developer or contributor checks Layer 0 themselves: quick
   start, what each automated check proves, per-property manual procedures for crypto and
   networking, cross-architecture diffing, and an explicit list of what is **not** verifiable yet.
-- CI now runs an explicit architecture matrix (`x86_64`, `aarch64` Linux, `aarch64` macOS), the
-  layering check, and both walkthroughs.
+- CI is now configured with an explicit architecture matrix (`x86_64`, `aarch64` Linux, `aarch64`
+  macOS), the layering check, the reproducible-build job, and both walkthroughs. **It has not yet
+  executed** — `ci.yml` triggers only on `push: [master]` and `pull_request`, and the Layer-0
+  branch has no PR. See `docs/20-completion/01-outstanding-work.md` §A1.
+- `docs/20-completion/` — a dated, evidence-backed audit of where the project actually stands
+  against its own gates, plus the complete list of what remains to be completed and tested.
+  Verdict as of 2026-09-23: **Layer 0 for v1 is roughly one third complete** — G0 near-closed and
+  blocked on CI, G1 and G5 not started.
 - Four secret-hygiene tests and a `zeroize_now()` wipe API.
 - `docs/18-implementation-plan/` — how Layer 0 actually gets built: workspace migration, G0/G1/G5
   task breakdowns with per-task acceptance criteria, sequencing rules, five named risks, and

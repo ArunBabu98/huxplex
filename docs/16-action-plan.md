@@ -24,8 +24,8 @@ Verified by reading `src/` and running the test suite, not by reading docs.
 |---|---|
 | ~1,200 lines of implementation across `crates/hux-crypto/src/` and `crates/hux-network/src/` | `wc -l crates/*/src/*.rs` |
 | ~4,800 lines of **tests** across `crates/*/tests/` and co-located gated suites | `wc -l crates/*/tests/*.rs` |
-| **Build is green** — **112 passed, 0 failed, 84 ignored**; reproducible release builds verified | `./scripts/verify-layer0.sh --full` on `aarch64-apple-darwin`. Dual-architecture CI is wired but has not yet run |
-| 84 ignored tests are conformance suites for four unimplemented primitives | `slh_dsa` (G1), `lb_vrf` / `pq_ssle` (G6+), `zk_stark` (G10) — each `#[ignore]` names its gate |
+| **Build is green** — **115 passed, 0 failed, 81 ignored**; reproducible release builds verified | `./scripts/verify-layer0.sh --full` on `aarch64-apple-darwin`, re-verified 2026-09-23 at `63ad3d5`. Dual-architecture CI is wired but **has never run** — see G0 item 5 |
+| 81 ignored tests are conformance suites for four unimplemented primitives | `slh_dsa` 22 (G1), `lb_vrf` 17 + `pq_ssle` 16 (G6+), `zk_stark` 26 (G10) — each `#[ignore]` names its gate |
 | No ledger, no consensus, no VM, no storage, no transport, no tokens, no agents | absence across `crates/` |
 | Connectors are now specified but unbuilt | [07-connector-protocol](15-specifications/07-connector-protocol.md), [ADR-0015](adr/0015-connector-architecture.md), [ADR-0016](adr/0016-evidence-and-attestation.md) |
 
@@ -34,6 +34,11 @@ Verified by reading `src/` and running the test suite, not by reading docs.
 > The root cause of the architecture failure was `mlkem768::avx2::*` hardcoded in
 > what is now `crates/hux-crypto/src/kem.rs` — AVX2 is x86-64 only and does not exist on `aarch64`.
 > See G0 below for what changed and what remains.
+
+> **Where the project actually stands**, audited against this plan on 2026-09-23:
+> [`20-completion/`](20-completion/). Short version — **Layer 0 is about one third complete**: G0
+> is near-closed but blocked on CI that has never executed against the workspace, and G1 and G5
+> have not started.
 
 **Read this honestly:** the repository is a *spec-test-first* project. The founder has
 written extensive conformance tests ahead of the implementations — including full FIPS 205
@@ -105,7 +110,7 @@ G0 → G1 → G2 → G3 → G4 → G6 → G7      (the binding sequence)
 
 # Part I — The v1 critical path
 
-## G0 · Repository health — 🟢 mostly complete (2026-09-12)
+## G0 · Repository health — 🟦 near-closed, **not closed** (audited 2026-09-23)
 
 > **The gate nobody wants to write and everybody needs.** Before this gate `cargo test` did
 > not compile, which meant *none* of the authored tests protected anything.
@@ -117,13 +122,13 @@ G0 → G1 → G2 → G3 → G4 → G6 → G7      (the binding sequence)
 | # | Item | Status |
 |---|---|---|
 | 1 | **ML-KEM backend selection.** `crates/hux-crypto/src/kem.rs` called `mlkem768::avx2::*` unconditionally — AVX2 is x86-64 only and does not exist on `aarch64` | ✅ Switched to libcrux's top-level *multiplexing* entry points, which detect CPU capability at runtime and fall back to portable. `Cargo.toml` now enables `simd256` on x86-64 and `simd128` (NEON) on aarch64, so both architectures get a fast backend. All backends are output-identical, so no test vector changed |
-| 2 | **Four phantom modules.** `slh_dsa`, `lb_vrf`, `pq_ssle`, `zk_stark` were imported by tests but declared only in a comment | ✅ Created as `#[cfg(test)]` API-contract modules with `unimplemented!()` bodies, so the suites type-check against a fixed signature while **no unimplemented cryptography is reachable from the public API**. Their 84 tests are `#[ignore]`d with gate labels. No test was deleted |
+| 2 | **Four phantom modules.** `slh_dsa`, `lb_vrf`, `pq_ssle`, `zk_stark` were imported by tests but declared only in a comment | ✅ Created as `#[cfg(test)]` API-contract modules with `unimplemented!()` bodies, so the suites type-check against a fixed signature while **no unimplemented cryptography is reachable from the public API**. Their tests are `#[ignore]`d with gate labels — 81 as of `63ad3d5`, after three vacuously-gated size assertions were un-ignored. No test was deleted |
 | 3 | `E0121` — placeholder `_` in a return type | ✅ `make_validator_set` now returns `Vec<(SslePublicKey, SsleSecretKey)>` |
 | 4 | Split the 3,607-line crypto module into `tests/` | ✅ Done via the workspace migration — `lib.rs` is now 36 lines; suites live in `crates/*/tests/` |
-| 5 | CI on both `x86_64` and `aarch64` | 🟦 Matrix wired (`ubuntu-latest`, `ubuntu-24.04-arm`, `macos-latest`) — **unproven until it runs** |
+| 5 | CI on both `x86_64` and `aarch64` | 🔴 Matrix wired (`ubuntu-latest`, `ubuntu-24.04-arm`, `macos-latest`) but **structurally unable to run**: `ci.yml` triggers only on `push: [master]` and `pull_request`, and the Layer-0 branch has no PR. Zero CI runs exist for it; the newest run of any kind predates the workspace. See [`20-completion/01-outstanding-work.md` §A1](20-completion/01-outstanding-work.md) |
 | 6 | *(added)* the crate root declared modules privately, making the whole library dead code | ✅ Now `pub mod`, with `#![forbid(unsafe_code)]` enforcing Principle #8. Warnings went 24 → 0 |
 | 7 | *(added)* `PeerId::from_ml_dsa_pk` used `std::io::Read::read`, whose short reads would silently zero-pad a peer identity | ✅ Now uses `XofReader::read`, which always fills the buffer. PeerId values unchanged (tests confirm) |
-| 8 | *(added 2026-09-22)* **Workspace split** — single crate → `crates/hux-crypto`, `crates/hux-network` ([ADR-0005](adr/0005-build-strategy.md) amendment) | ✅ Done — 112 tests unchanged, layering enforced in CI |
+| 8 | *(added 2026-09-22)* **Workspace split** — single crate → `crates/hux-crypto`, `crates/hux-network` ([ADR-0005](adr/0005-build-strategy.md) amendment) | ✅ Done — 112 tests unchanged at the time of the move (115 today), layering gate added to CI though **not yet executed there** |
 | 9 | *(added 2026-09-22)* **`PrivateKey` derives `Debug`** — prints 2,560 B of secret key to any log or panic message | ✅ Fixed — redacted `Debug`, `ZeroizeOnDrop`, constant-time `Eq`, private bytes behind `expose_secret()` |
 | 10 | *(added 2026-09-22)* **Pin the C toolchain** — `aws-lc-rs` compiles C/asm, so `rust-toolchain.toml` no longer determines output bytes ([ADR-0019](adr/0019-transport-authentication.md) condition 3) | ⏸️ Deferred to **G5** — `aws-lc-rs` is not in the tree yet; the G0-T2 baseline is established without it |
 
@@ -131,15 +136,19 @@ G0 → G1 → G2 → G3 → G4 → G6 → G7      (the binding sequence)
 
 | ID | Property | Status |
 |---|---|---|
-| **G0-T1** | `cargo test --all-targets` compiles and passes on x86-64 **and** aarch64 | 🟢 **105 passed, 0 failed, 84 ignored** on `aarch64-apple-darwin`; `cargo check` green on `x86_64-apple-darwin`. Not yet enforced in CI (item 5) |
+| **G0-T1** | `cargo test --all-targets` compiles and passes on x86-64 **and** aarch64 | 🟦 **open.** **115 passed, 0 failed, 81 ignored** natively on `aarch64-apple-darwin`. The suite also passes for `--target x86_64-apple-darwin`, but that ran under Rosetta 2, which reports no AVX/AVX2 — so libcrux dispatched to the **portable** backend and the `simd256` path was never executed. **Native x86-64 is unproven**, and CI has never run (item 5) |
+| **G0-T1 (negative)** | A deliberate architecture-specific call (`mlkem768::avx2::*`) must **fail** the aarch64 job | ⬜ **not written.** A matrix that can only pass does not prove it would catch the regression it exists for |
 | **G0-T2** | `cargo build --release` produces bit-identical artifacts across two clean checkouts | 🟢 **Established** — `scripts/check-reproducible.sh`, in CI and in `verify-layer0.sh --full`. Recipe: pinned toolchain + `--locked` + `SOURCE_DATE_EPOCH` + `--remap-path-prefix` + a **canonical build path** ([ci-cd.md](10-development/ci-cd.md)) |
-| **G0-T3** | Every `#[ignore]`d test names the gate that will un-ignore it | 🟢 All 84 carry `GATE: G1 / G6+ / G10` in the ignore reason |
+| **G0-T3** | Every `#[ignore]`d test names the gate that will un-ignore it | 🟢 All 81 carry `GATE: G1 / G6+ / G10` in the ignore reason |
 
-**Ignored-test inventory:** `slh_dsa_128s_tests` 24 (G1) · `lb_vrf_tests` 17 (G6+) ·
-`pq_ssle_tests` 16 (G6+) · `zk_stark_tests` 27 (G10).
+**Ignored-test inventory:** `slh_dsa_128s_tests` 22 (G1) · `lb_vrf_tests` 17 (G6+) ·
+`pq_ssle_tests` 16 (G6+) · `zk_stark_tests` 26 (G10).
 
-**Remaining to close G0:** item 5 only — the architecture matrix must actually run green, including the negative case (a deliberate `avx2::` call must fail the aarch64 job). Step-by-step:
-[`18-implementation-plan/01-g0-repository-health.md`](18-implementation-plan/01-g0-repository-health.md).
+**Remaining to close G0:** two items, both on the CI side. **(a)** CI must be able to run at all —
+open a PR for the Layer-0 branch, or widen `ci.yml`'s `push` trigger; **(b)** the negative case
+must be written, so a deliberate `avx2::` call fails the aarch64 job. Step-by-step:
+[`18-implementation-plan/01-g0-repository-health.md`](18-implementation-plan/01-g0-repository-health.md)
+and [`20-completion/01-outstanding-work.md`](20-completion/01-outstanding-work.md) Phase A.
 
 > **Standing rule from this gate:** never call an architecture-specific backend path
 > (`mlkem768::avx2::*`, `::neon::*`) directly. Always use the top-level dispatching entry

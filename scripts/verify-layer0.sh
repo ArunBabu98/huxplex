@@ -87,9 +87,11 @@ done
 printf '\n'
 if [[ "$failures" -eq 0 ]]; then
   printf '  %sAll %d checks passed on %s.%s\n' "$GREEN" "${#NAMES[@]}" "$(uname -m)" "$RESET"
-  printf '\n  %sLayer 0 is NOT complete.%s Gates G1 (agility registry) and G5 (transport)\n' "$YELLOW" "$RESET"
-  printf '  are still open — see docs/18-implementation-plan/. What you just verified is the\n'
-  printf '  primitive layer: signatures, KEM, derivation, domain separation, signed envelopes.\n'
+  printf '\n  %sLayer 0 is NOT complete.%s G0 (repo health) is near-closed but still open on\n' "$YELLOW" "$RESET"
+  printf '  dual-architecture CI; G1 (agility registry) and G5 (transport) have not started.\n'
+  printf '  What you just verified is the primitive layer: signatures, KEM, derivation, domain\n'
+  printf '  separation, signed envelopes — on THIS architecture only.\n'
+  printf '  Status: docs/20-completion/   Build order: docs/18-implementation-plan/\n'
 else
   printf '  %s%d of %d checks FAILED.%s\n' "$RED" "$failures" "${#NAMES[@]}" "$RESET"
   printf '  Please open an issue with the transcript above:\n'

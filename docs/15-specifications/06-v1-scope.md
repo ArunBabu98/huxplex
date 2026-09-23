@@ -20,6 +20,10 @@ elaborates it into a checklist.
 
 A v1 release is "done" when **all** of these are true and tested:
 
+> **Progress against this list, audited 2026-09-23: 3 of 21 boxes.** The three checked are the
+> ML-DSA-44, ML-KEM-768 and BIP32 primitives; everything else is unbuilt. Evidence and the full
+> remaining path: [`../20-completion/`](../20-completion/).
+
 ### Cryptography & encoding (mostly 🟢 today)
 - [x] ML-DSA-44 sign/verify with context strings (exists)
 - [x] ML-KEM-768 + HKDF session derivation (exists)

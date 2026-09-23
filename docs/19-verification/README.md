@@ -53,9 +53,12 @@ finished.
 | **QUIC transport, TLS with ML-DSA certs, live DHT, GossipSub** | 🟡 gate **G5** | ❌ not yet |
 | Consensus, state, VM, tokens, agents | 🟡 later gates | ❌ not yet |
 
-**Layer 0 is complete only when G1 and G5 both close.** The build order and the tests that
+**Layer 0 is complete only when G0, G1 and G5 all close.** The build order and the tests that
 unlock each gate are in [`../18-implementation-plan/`](../18-implementation-plan/) and
-[`../16-action-plan.md`](../16-action-plan.md).
+[`../16-action-plan.md`](../16-action-plan.md). For where the project actually stands against
+them — audited, with the commands behind every claim — see
+[`../20-completion/`](../20-completion/). As of 2026-09-23: **G0 near-closed and blocked on CI
+that has never run, G1 and G5 not started.**
 
 ## What each automated check proves
 
@@ -65,7 +68,7 @@ unlock each gate are in [`../18-implementation-plan/`](../18-implementation-plan
 | No clippy lints | `-D warnings` across all targets and features | A warning tolerated once is a warning ignored forever |
 | Crate layering is downward-only | `hux-network → hux-crypto`, never upward | Layering is what keeps the crypto crate independently auditable and exportable ([repository-structure](../10-development/repository-structure.md)) |
 | Workspace builds | `--locked`, so the committed `Cargo.lock` is honoured | A build that silently resolves different dependencies is not the build we tested |
-| Test suite | **112 tests pass, 84 correctly ignored** | Every ignored test names the gate that un-ignores it (G0-T3) |
+| Test suite | **115 tests pass, 81 correctly ignored** | Every ignored test names the gate that un-ignores it (G0-T3) |
 | Docs build without warnings | `RUSTDOCFLAGS=-D warnings` | Broken intra-doc links mean the reasoning trail is rotting |
 | Crypto walkthrough | The seven properties in [`01-crypto.md`](01-crypto.md) | Demonstration you can read, not just a green tick |
 | Network walkthrough | The six properties in [`02-network.md`](02-network.md) | Same |

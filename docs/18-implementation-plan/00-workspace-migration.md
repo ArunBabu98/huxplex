@@ -8,6 +8,9 @@
 >
 > *Baseline at the time of the move: **112 passed, 0 failed, 84 ignored** (108 before the G0-6
 > secret-hygiene fix added four). The counts after the move must match exactly.*
+>
+> *Those are historical figures for this migration. The suite today is **115 / 0 / 81** — commit
+> `63ad3d5` un-ignored three vacuously-gated size assertions after the move.*
 
 ## Target layout (this gate only)
 
@@ -92,6 +95,7 @@ in both.
 ## Acceptance for the whole migration
 
 - `cargo test` — **112 passed, 0 failed, 84 ignored**, identical to before the move. ✅
+  *(Current tree: 115 / 0 / 81 — three tests were un-ignored later, in `63ad3d5`.)*
 - `cargo clippy --all-targets` — zero warnings. ✅
 - `forbid(unsafe_code)` survives the move to `[workspace.lints]` — verified by compiling a
   deliberate `unsafe {}` probe and confirming it is rejected. ✅
