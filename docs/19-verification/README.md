@@ -73,7 +73,7 @@ encoding for the two wire types — joined the definition via
 | No arch-specific backend paths | No `::avx2::`, `::neon::`, `::simd256::`, `::simd128::` call in any Rust source | Hardcoding one backend excludes an entire architecture from the validator set. This is the break that started G0 |
 | Arch guard catches a regression | On aarch64, an injected `mlkem768::avx2::*` call is **rejected** by the compiler | A check that can only pass proves nothing. This one is verified by deliberately breaking the tree |
 | Workspace builds | `--locked`, so the committed `Cargo.lock` is honoured | A build that silently resolves different dependencies is not the build we tested |
-| Test suite | **133 tests pass, 81 correctly ignored** | Every ignored test names the gate that un-ignores it (G0-T3) |
+| Test suite | **140 tests pass, 81 correctly ignored** | Every ignored test names the gate that un-ignores it (G0-T3) |
 | Docs build without warnings | `RUSTDOCFLAGS=-D warnings` | Broken intra-doc links mean the reasoning trail is rotting |
 | Crypto walkthrough | The seven properties in [`01-crypto.md`](01-crypto.md) | Demonstration you can read, not just a green tick |
 | Network walkthrough | The six properties in [`02-network.md`](02-network.md) | Same |

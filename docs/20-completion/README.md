@@ -17,7 +17,7 @@ is closed, one is about half built, and two have not started.
 | Gate | Layer-0 scope | Status | Completion |
 |---|---|---|---|
 | **G0** · Repository health | workspace, portability, reproducibility, secret hygiene | 🟢 **CLOSED 2026-09-23** — all four exit criteria green in CI on three architectures | 100% |
-| **G1** · Crypto core + agility registry | `(role, version)` registry, SLH-DSA-128s, KATs, hybrid KEX | 🟦 **in progress** — C1–C5 done (the registry); C6–C11 open | ~45% |
+| **G1** · Crypto core + agility registry | `(role, version)` registry, SLH-DSA-128s, KATs, hybrid KEX | 🟦 **in progress** — C1–C5 (registry) and the hash/KDF half of C10 done; C6–C9, C11 and the rest of C10 open | ~55% |
 | **G2a** · Wire encoding | canonical `Codec` + canonical decode for `GossipMessage`, `DhtEntry`, carrying the `(role, version)` descriptor | 🔴 **not started** — added to Layer 0 by [ADR-0022](../adr/0022-g2-split-wire-and-consensus-encoding.md) | 0% |
 | **G5** · Transport | libp2p/QUIC, ML-DSA TLS certificates, live DHT, GossipSub | 🔴 **not started** — N0 ✅ closed, identity settled by [ADR-0021](../adr/0021-peer-identity-across-libp2p.md); entry is now **G2a** | ~2% |
 
