@@ -30,6 +30,7 @@ pub mod kem {
 pub mod sig {
     pub mod ml_dsa;
 }
+pub mod hash;
 
 // API contracts for primitives that are specified and test-covered but NOT yet implemented.
 // They are `#[cfg(test)]` so the conformance suites below type-check against a fixed

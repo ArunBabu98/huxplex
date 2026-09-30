@@ -11,6 +11,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Byte-exact KATs for SHAKE-256 and HKDF-SHA-256 session keys (G1 · C10, in part)** —
+  `crates/hux-crypto/tests/kat_hashes.rs`. Includes all three vectors at the 1,312-byte ML-DSA-44
+  key length, the only length that occurs when deriving a `PeerId`, and the published FIPS 202
+  empty-input value, which is checkable against an external authority rather than only against
+  this project's history. **C10 was recorded as blocked on C9; that dependency was too broad** —
+  C9 blocks *signature* KATs, which need pinned randomness. Hashes and KDFs take none, so their
+  vectors were always committable.
 - **The algorithm-suite registry (G1 · C1–C5).** Resolution is `(role, suite version) → primitive`
   ([ADR-0018](docs/adr/0018-signature-role-profiles.md), [crypto spec §1.1](docs/15-specifications/02-cryptography-spec.md)).
   `SigRole` carries the five roles with discriminants **asserted equal to `KeyPurpose` at compile
@@ -151,6 +158,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   review, not by a test — which is why four tests now pin it.
 
 ### Changed
+- **SHAKE-256 moved from RustCrypto `sha3` to `libcrux-sha3`,** retiring `sha3` from the
+  workspace. `libcrux-sha3` was already in the tree (pulled by `libcrux-ml-dsa` and
+  `libcrux-ml-kem`), so this adds nothing new to the supply chain while removing a vendor from an
+  **identity-critical** primitive — `PeerId = SHAKE-256(ml_dsa_pk)[..32]`. It is also the
+  formally-verified vendor the dependency policy already names for the PQ primitives. The
+  migration was proven byte-neutral *before* it was made, by differential test against the
+  outgoing implementation, and the result committed as KATs so the property stays guarded once
+  the old crate is gone. SHAKE now lives in `hux-crypto`, so **`hux-network` names no
+  cryptographic vendor at all** and is down to three dependencies; the C4 encapsulation guard
+  covers `libcrux_sha3` as a third confined vendor.
 - **Four build decisions recorded 2026-09-22.** (1) The **workspace split happens at G0**, before
   the agility registry ([ADR-0005](docs/adr/0005-build-strategy.md) amendment). (2) SLH-DSA-128s
   is implemented on **`fips205`**, with RustCrypto **`slh-dsa`** as a CI differential oracle.
