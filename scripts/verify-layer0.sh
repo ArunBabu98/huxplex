@@ -94,8 +94,8 @@ done
 printf '\n'
 if [[ "$failures" -eq 0 ]]; then
   printf '  %sAll %d checks passed on %s.%s\n' "$GREEN" "${#NAMES[@]}" "$(uname -m)" "$RESET"
-  printf '\n  %sLayer 0 is NOT complete.%s G0 (repo health) is closed; G1 (agility registry)\n' "$YELLOW" "$RESET"
-  printf '  and G5 (transport) have not started — so this is one of three gates.\n'
+  printf '\n  %sLayer 0 is NOT complete.%s G0 is closed; G1 is part-built (registry + hash\n' "$YELLOW" "$RESET"
+  printf '  KATs in, SLH-DSA and the hybrid KEX not); G2a and G5 have not started.\n'
   printf '  What you just verified is the primitive layer: signatures, KEM, derivation, domain\n'
   printf '  separation, signed envelopes — on THIS architecture only. Cross-architecture\n'
   printf '  agreement is proven by the CI matrix, not by this run.\n'

@@ -20,8 +20,8 @@
 | # | Step | Why here | Blocked by |
 |---|---|---|---|
 | 1 | **C6** — no size literal outside the suite descriptor | finishes the registry's job; cheapest remaining task | — |
-| 2 | **C9** — split signing into production (CSPRNG-only) and test-only (explicit randomness) | **two functions, not a flag** | — |
-| 3 | **C10** — byte-exact KAT fixtures | signature KATs cannot be pinned without a deterministic entry point | **C9** |
+| 2 | **C9** — split signing into production (CSPRNG-only) and test-only (explicit randomness) | **two functions, not a flag**; unblocks *signature* KATs only | — |
+| 3 | **C10** — remaining KAT fixtures (ML-DSA-44, ML-KEM-768 keygen; then signatures) | hash/KDF half ✅ **done 2026-09-30**; keygen is deterministic and could land now; *signature* vectors still need C9 | partly **C9** |
 | 4 | **C7 / C8** — SLH-DSA-128s on `fips205`, with the RustCrypto differential oracle | un-ignores 22 tests, and **completes G1-T1** by giving the registry a second implemented scheme | — |
 | 5 | **B5** — hybrid X25519 + ML-KEM-768 | **G1-T5**, and G5 needs it | — |
 | 6 | **G1-T2** — exhaustive ordered-pair sweep over the context registry | the role sweep is done; the context sweep is not | — |
@@ -42,10 +42,12 @@ Everything remaining is implementation, in the order above.
 > work Layer 0 needs. The `DhtEntry` forgery was the cost of not having that discipline before
 > the envelope code shipped.
 
-Two follow-ons that are not Layer 0 but are unblocked by it: **C10 unblocks
-[issue #12](https://github.com/ArunBabu98/huxplex/issues/12)** (the digest-stack upgrade, which
-needs KATs to prove no `PeerId` changes), and **G5 activates G0-7**, the C-toolchain pin, because
-`aws-lc-rs` enters the tree there.
+✅ **[Issue #12](https://github.com/ArunBabu98/huxplex/issues/12) is closed** — the digest-stack
+upgrade landed 2026-09-30 ([#20](https://github.com/ArunBabu98/huxplex/pull/20),
+[#21](https://github.com/ArunBabu98/huxplex/pull/21)). It did not need full C10: SHAKE-256 moved
+to `libcrux-sha3` (already in the tree, retiring RustCrypto `sha3` entirely), and the hash/KDF
+KATs proved the migration byte-neutral. **`aws-lc-rs` still activates G0-7**, the C-toolchain pin,
+when it enters the tree at G5.
 
 ---
 

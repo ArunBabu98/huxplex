@@ -110,12 +110,19 @@ refactor current hard-coded sizes (`[u8;1312]`/`[u8;2420]`) behind the suite des
 | ID | Task | Acceptance |
 |---|---|---|
 | **C9** ⬜ | Production signing sources randomness from the system CSPRNG and **cannot accept a caller-supplied value**; a separate test-only entry point takes explicit randomness ([crypto spec §3](../15-specifications/02-cryptography-spec.md)) | Two functions, not one with a flag. The test-only path is unreachable from the public API |
-| **C10** ⬜ | Byte-exact KAT fixtures for ML-DSA-44, ML-KEM-768, SLH-DSA-128s, and the hash domains — signature fixtures pin the 32-byte randomness | **G1-T3** on both architectures |
+| **C10** 🟦 | Byte-exact KAT fixtures for ML-DSA-44, ML-KEM-768, SLH-DSA-128s, and the hash domains — signature fixtures pin the 32-byte randomness | **G1-T3** on both architectures. **Hash domains ✅ done 2026-09-30** (`tests/kat_hashes.rs`: SHAKE-256 incl. the 1,312-byte ML-DSA key length, and HKDF-SHA-256 session keys). Remaining: ML-DSA-44 / ML-KEM-768 keygen (deterministic — could land now), signatures (need C9), SLH-DSA (C7), BLAKE3 (G2b) |
 | **C11** ⬜ | `libcrux` ↔ `aws-lc-rs` ML-DSA differential test ([ADR-0019](../adr/0019-transport-authentication.md) condition 4) | Same input ⇒ identical verification verdict; cross-verification of each other's signatures |
 
 > **Why C9 is phrased as "two functions, not one with a flag."** A `deterministic: bool` parameter
 > is a downgrade switch waiting for a misconfiguration, and deterministic lattice signing plus
 > fault injection is a demonstrated key-recovery path (eprint 2025/2009).
+
+> **Correction, 2026-09-30 — C9 blocks less of C10 than recorded.** "C9 blocks C10" was drawn too
+> broadly. C9 blocks **signature** KATs, which need pinned randomness to reproduce. Hashes, KDFs
+> and *keygen* take no randomness, so those vectors were always committable. The hash and KDF half
+> landed ahead of C9 and was what made the SHAKE migration and the digest-stack upgrade provably
+> byte-neutral. Sequence the deterministic vectors first; they are free and they are what protects
+> a dependency change.
 
 ### E. Deferred at this gate
 

@@ -22,7 +22,7 @@ ordering gap §5.2 records. Measured against it:
 | | Criterion (verbatim from that table) | Reality | |
 |---|---|---|---|
 | **G0** | Workspace split; dual-architecture CI green; reproducible builds demonstrated by an automated two-build comparison; no secret printable via `Debug` | Workspace ✅ · reproducibility ✅ · `Debug` ✅ · **CI green on three architectures** ✅ | 🟢 **CLOSED** |
-| **G1** | Registry is the only path to a primitive; SLH-DSA green with 24 tests un-ignored; KATs byte-exact on both architectures; G1-T1 and G1-T6 green | Registry ✅ and mechanically enforced (C1–C5). Still no SLH-DSA, no KAT fixtures, no hybrid KEX. 5 of 11 tasks | 🟦 |
+| **G1** | Registry is the only path to a primitive; SLH-DSA green with 24 tests un-ignored; KATs byte-exact on both architectures; G1-T1 and G1-T6 green | Registry ✅ and mechanically enforced (C1–C5); hash/KDF KATs ✅ (C10, in part). Still no SLH-DSA, no hybrid KEX, no signature KATs. ~6 of 11 tasks | 🟦 |
 | **G2a** | Canonical `Codec` + canonical decode for the **wire** types, carrying the `(role, version)` descriptor | Not started. Added to the Layer-0 definition 2026-09-30 by [ADR-0022](../adr/0022-g2-split-wire-and-consensus-encoding.md) | 🔴 |
 | **G5** | 5 nodes mutually authenticate over QUIC with ML-DSA certificates, discover via Kademlia, gossip under 20% loss; G5-T6 and G5-T7 green | No transport, no swarm, no TLS, no peer state machine. N0 ✅ closed (drive quinn directly); identity settled by [ADR-0021](../adr/0021-peer-identity-across-libp2p.md); entry is now **G2a** | 🔴 |
 
@@ -43,7 +43,7 @@ G3 (ledger), G4 (execution), G6 (consensus) and G7 (devnet) have no code whatsoe
 |---|---|---|
 | Full local harness | `./scripts/verify-layer0.sh` | **13/13 PASS** — fmt, clippy `-D warnings`, layering, arch-portability guard, primitive-encapsulation guard, build `--locked`, tests, doctests, docs, both walkthroughs, determinism re-run, arch negative case. (9/9 at audit time; G0-8 and G1·C4 added four.) |
 | Reproducible build (G0-T2) | `./scripts/check-reproducible.sh` | **PASS** — `libhux_crypto.rlib` `5e495a84…b5a0` and `libhux_network.rlib` `334fb745…2957` identical across two independent clean copies |
-| Test suite | `cargo test --all-targets --all-features --locked` | **133 passed · 0 failed · 81 ignored**. Was 115 at audit time: the DHT field-framing fix (§5.1) added two, the G1 registry suite added sixteen |
+| Test suite | `cargo test --all-targets --all-features --locked` | **140 passed · 0 failed · 81 ignored**. Was 115 at audit time: DHT field-framing +2, G1 registry suite +16, hash/KDF KATs +7 |
 | Gate labels (G0-T3) | `grep -rn '#\[ignore' crates/` | **81/81 labelled** — `GATE: G1` ×22, `GATE: G6+` ×33, `GATE: G10` ×26 |
 | Supply chain | `cargo deny check advisories licenses bans sources` | **ok** — one documented, owned, dated advisory exception (`RUSTSEC-2026-0173`) |
 | Second architecture (local) | `cargo test --all-features --locked --target x86_64-apple-darwin` | **115 passed** — but see §3.2, this is Rosetta and it proves less than it appears to |
@@ -219,12 +219,18 @@ has yet proved a registration needs no size edit.
 `unimplemented!()` bodies; 22 tests are `#[ignore]`d under `GATE: G1`. `fips205` is not a
 dependency, nor is RustCrypto `slh-dsa` as the differential oracle.
 
-**No KAT fixtures exist anywhere in the tree** (C10). No fixtures directory, no committed vectors.
+**KAT fixtures exist for the hash domains only** (C10, in part). `tests/kat_hashes.rs` pins
+SHAKE-256 — including all three vectors at the 1,312-byte ML-DSA-44 key length, the only length
+that occurs in `PeerId` derivation — and HKDF-SHA-256 session keys. ML-DSA-44 and ML-KEM-768
+vectors are still missing.
 
-**C9 blocks C10.** `Keypair::sign` draws its 32 bytes from `rand::rng()` unconditionally and
-exposes no test-only entry point taking explicit randomness. Until the two-function split lands,
-*signature* KATs cannot be pinned at all — only keygen vectors could be. C10 in turn gates the
-digest-stack upgrade in [issue #12](https://github.com/ArunBabu98/huxplex/issues/12).
+**C9 blocks less of C10 than was recorded.** `Keypair::sign` still draws its 32 bytes from
+`rand::rng()` with no test-only entry point, so *signature* KATs cannot be pinned. But hashes,
+KDFs and keygen take no randomness, so those vectors were always committable — and landing them
+first is what made the SHAKE migration and the digest-stack upgrade
+([#20](https://github.com/ArunBabu98/huxplex/pull/20), [#21](https://github.com/ArunBabu98/huxplex/pull/21))
+provably byte-neutral, closing [issue #12](https://github.com/ArunBabu98/huxplex/issues/12) without
+waiting for C9.
 
 **No hybrid X25519 + ML-KEM-768 key agreement** (G1-T5), and no `libcrux` ↔ `aws-lc-rs`
 differential test (C11).
