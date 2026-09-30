@@ -116,9 +116,18 @@ Recorded 2026-09-22 alongside [ADR-0019](../adr/0019-transport-authentication.md
 | ML-DSA-44 (TLS transport) | **`aws-lc-rs`** via rustls | Audited, FIPS-validatable; **not** formally verified | C/assembly, BoringSSL lineage. **Non-FIPS build only** |
 | SLH-DSA-128s | **`fips205`** | Pure Rust, no `unsafe`, all 12 parameter sets | |
 | SLH-DSA-128s (CI oracle) | **`slh-dsa`** (RustCrypto) | Second vendor | Differential test only, never a runtime dependency |
+| **SHAKE-256** (PeerId, identity hash) | **`libcrux-sha3`** | **Formally verified** (same hax + F* effort as ml-dsa/ml-kem) | Already in the tree via `libcrux-ml-{dsa,kem}`, so a direct dependency costs nothing new. Adopted 2026-09-30, retiring RustCrypto `sha3`; migration proven byte-neutral by KATs generated from the previous implementation |
+| BLAKE3 (bulk state, Merkle) | *undecided* | — | Arrives with the consensus types at G2b |
 
 **Rule:** where two implementations of one primitive exist in the tree, CI MUST run a
-**differential test** between them. This is what makes [`cryptography.md`](../02-architecture/cryptography.md)
+**differential test** between them.
+
+**Corollary, learned 2026-09-30:** where a primitive is *replaced* rather than duplicated, the
+differential test is only available **while both implementations are present**. Run it before the
+migration, and commit the result as a KAT generated from the **outgoing** implementation — a
+vector generated from the incoming one proves only that the new code agrees with itself. This is
+how SHAKE-256 moved from RustCrypto `sha3` to `libcrux-sha3` without changing a single `PeerId`
+(`crates/hux-crypto/tests/kat_hashes.rs`). This is what makes [`cryptography.md`](../02-architecture/cryptography.md)
 engineering rule 4 (multi-vendor) real rather than aspirational.
 
 ---

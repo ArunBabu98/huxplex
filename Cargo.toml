@@ -23,10 +23,12 @@ unsafe_code = "forbid"
 # see docs/10-development/repository-structure.md § Dependency policy.
 libcrux-ml-dsa = "0.0.10"
 libcrux-ml-kem = "0.0.10"
+# SHAKE-256 (PeerId, identity hash domain). Already in the tree via ml-dsa/ml-kem, so this is
+# a direct dependency on a crate we were already compiling — and it retires RustCrypto `sha3`.
+libcrux-sha3 = "0.0.10"
 
 hkdf = "0.12.4"
 sha2 = "0.10.9"
-sha3 = "0.10.8"
 thiserror = "2.0.18"
 hex = "0.4.3"
 bip32 = "0.5.3"

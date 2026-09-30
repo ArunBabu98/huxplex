@@ -40,11 +40,19 @@ Rules:
 |---|---|---|
 | Transport key agreement | **ML-KEM-768 + X25519** (hybrid) | FIPS 203 (+ RFC 7748) |
 | Key derivation | **HKDF-SHA-256** | RFC 5869 |
-| Identity / XOF hash | **SHAKE-256** | FIPS 202 |
+| Identity / XOF hash | **SHAKE-256** | FIPS 202 |  <!-- impl: libcrux-sha3, see below -->
 | Bulk state / Merkle hash | **BLAKE3** (256-bit) | — |
 
-> ⚠️ Implemented today (🟢): ML-DSA-44, ML-KEM-768, HKDF-SHA-256, SHAKE-256, BIP32 derivation.
-> Specified but not yet in code (🟡): the role dimension, SLH-DSA-128s, X25519 hybrid leg, BLAKE3.
+> ⚠️ Implemented today (🟢): ML-DSA-44, ML-KEM-768, HKDF-SHA-256, SHAKE-256, BIP32 derivation,
+> and the `(role, version)` registry. Specified but not yet in code (🟡): SLH-DSA-128s, the
+> X25519 hybrid leg, BLAKE3.
+>
+> **SHAKE-256 is implemented on `libcrux-sha3`** (2026-09-30), replacing RustCrypto `sha3`. The
+> primitive is unchanged — FIPS 202 SHAKE-256 — and the swap was proven byte-neutral by KATs
+> generated from the outgoing implementation before it was removed
+> (`crates/hux-crypto/tests/kat_hashes.rs`). This matters because SHAKE-256 defines `PeerId`, so
+> a byte change here is a network-wide identity change rather than a refactor. Rationale:
+> [repository-structure § Dependency policy](../10-development/repository-structure.md).
 
 > **v1 parameter note.** v1 keeps **ML-DSA-44** for both signing roles, per the
 > [v1 scope contract](06-v1-scope.md) §1 — measuring its overhead is v1's research deliverable.
@@ -283,6 +291,22 @@ hex(PeerId) = 64 lowercase hex chars
 
 Deterministic inputs already exercised by the in-repo tests; these are the **executable KATs**
 until byte-exact fixtures are committed (see task below).
+
+> **Committed 2026-09-30 — `crates/hux-crypto/tests/kat_hashes.rs`.** Byte-exact vectors for
+> **SHAKE-256** (including all three at the 1,312-byte ML-DSA-44 key length, the only length that
+> occurs when deriving a `PeerId`) and for **HKDF-SHA-256 session-key derivation**, generated
+> from the outgoing implementation and asserted against the incoming one.
+>
+> The empty-input SHAKE-256 vector is the published FIPS 202 value —
+> `46b9dd2b…6ed5762f` — so it is checkable against an external authority rather than only
+> against this project's own history. The rest pin *our* history, which is what a migration
+> needs.
+>
+> **Why these could land before task C9.** C10 was recorded as blocked on C9 (splitting
+> deterministic signing). That dependency was too broad: C9 blocks **signature** KATs, which need
+> pinned randomness to reproduce. Hashes and KDFs take no randomness, so their vectors were
+> always committable. Still outstanding for full C10: ML-DSA-44 and ML-KEM-768 vectors (keygen is
+> deterministic and could land now; signature vectors need C9), SLH-DSA-128s (C7), BLAKE3 (G2b).
 
 ### 7.1 Key derivation KAT
 ```

@@ -20,6 +20,7 @@ cd "$(dirname "$0")/.."
 declare -a RULES=(
   "libcrux_ml_dsa|crates/hux-crypto/src/sig/ml_dsa.rs"
   "libcrux_ml_kem|crates/hux-crypto/src/kem/ml_kem.rs"
+  "libcrux_sha3|crates/hux-crypto/src/hash/shake.rs"
 )
 
 fail=0
