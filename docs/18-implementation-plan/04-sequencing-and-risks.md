@@ -8,11 +8,16 @@ W1 → W2 → W3/W4/W5        workspace migration
   └→ G0-5 (dual-arch CI)
   └→ G0-7 → G0-T2         C toolchain pin → reproducible builds
 
-G0 closed
-  └→ G1  (C1…C11)         registry first, then primitives
-       └→ G2 …            canonical encoding — NOT in this plan
-            └→ G5 (N0 first, then N1…N11)
+G0 closed ✅
+  └→ G1  (C1…C11)         registry first ✅ (C1–C5), then primitives (C6–C11)
+       └→ G2a             canonical encoding, WIRE types only — in Layer 0 (ADR-0022)
+            └→ G5 (N0 ✅ → N0b, N1…N11)
+       └→ G2b             canonical encoding, consensus types — before G3, NOT in this plan
 ```
+
+**G2a is the only encoding work Layer 0 needs.** It is two types — `GossipMessage` and
+`DhtEntry` — with `G2-T1`/`T2`/`T4` over them. `G2-T3` (`TxId` excludes witnesses) belongs to
+G2b, because `TxId` does not exist at G5.
 
 Two things can start **immediately and in parallel** with the migration, because neither touches
 the code being moved:
@@ -29,13 +34,19 @@ the 108 tests only prove the move was clean if nothing else changed.
 1. **Registry before primitives.** G1 builds `AlgoSuite` and the traits *before* SLH-DSA, even
    though SLH-DSA is more visibly "progress." A primitive written before the registry will be
    called directly from somewhere, and that call site will survive.
-2. **Role dimension before G2.** [ADR-0011](../adr/0011-canonical-serialization.md) freezes
-   canonical encoding at G2. The `(role, version)` descriptor must be settled before then or it
-   is a state migration.
+2. **Role dimension before G2a.** ✅ *settled.* [ADR-0011](../adr/0011-canonical-serialization.md)
+   freezes canonical encoding, and **G2a freezes it for the wire types first**
+   ([ADR-0022](../adr/0022-g2-split-wire-and-consensus-encoding.md)). The `(role, version)`
+   descriptor shipped with the G1 registry, so G2a can carry it from its first encoding — which
+   ADR-0011 rule 3′ now requires. Freezing a wire format that cannot express the descriptor would
+   recreate the state-migration trap on the wire types.
 3. **Reproducibility baseline before `aws-lc-rs`.** Establish G0-T2 on the pure-Rust tree, then
    re-verify after the C dependency lands. Doing it only afterwards conflates two causes of
    failure.
-4. **N0 before any certificate code.** See [03](03-g5-transport.md).
+4. **N0 before any certificate code.** ✅ *done 2026-09-23* — outcome 3, quinn driven directly.
+   See [03](03-g5-transport.md).
+5. **G2a before N1.** G5 writes wire types; wire types need a frozen canonical encoding first.
+   This is the ordering the DHT forgery was the cost of not having.
 
 ## The five things most likely to go wrong
 
@@ -56,8 +67,18 @@ no reason to support a non-libp2p certificate format.
 
 **Detection:** N0, deliberately first.
 
-**Fallback:** ADR-0019's certificate-extension bridge. **Never** the exporter-binding phase — it
-exists only to compensate for a classical binding the accepted design removes.
+**Outcome (2026-09-23): the risk materialised, and the fallback was not needed.** `libp2p-quic`
+is indeed closed — private TLS fields, no setter — and the `libp2p-tls` fork route is closed too,
+for a different reason than anticipated: `make_*_config` take a `libp2p_identity::Keypair`, whose
+`KeyType` has no ML-DSA variant. **quinn is driven directly behind libp2p's `Transport` trait**
+(outcome 3). ADR-0019's certificate-extension bridge was *not* required, and the exporter-binding
+phase remains correctly excluded. Recorded in the
+[ADR-0012](../adr/0012-network-transport.md) and [ADR-0019](../adr/0019-transport-authentication.md)
+amendments.
+
+> The residual form of this risk is now narrower: if the transport ever reverts to `libp2p-quic`,
+> [ADR-0021](../adr/0021-peer-identity-across-libp2p.md)'s identity mechanism becomes unavailable
+> too, because that crate constructs the `PeerId` itself.
 
 ### R3 — the amplification margin is silently spent
 
@@ -109,14 +130,25 @@ Work stops and a decision returns to the architect if:
 |---|---|---|
 | **G0** | Workspace split; dual-architecture CI green; reproducible builds demonstrated by an automated two-build comparison; no secret printable via `Debug` | 🟢 **CLOSED 2026-09-23** — all four, green in CI on three architectures |
 | **G1** | Registry is the only path to a primitive; SLH-DSA green with its tests un-ignored; KATs byte-exact on both architectures; **G1-T1** and **G1-T6** green | 🟦 C1–C5 done — the registry is the only path to a primitive, enforced by CI. C6–C11 open |
-| **G5** | 5 nodes mutually authenticate over QUIC with ML-DSA certificates, discover via Kademlia, gossip under 20% loss; **G5-T6** and **G5-T7** green | 🔴 not started — N0 ✅ closed (quinn direct); N1 blocked on an identity ADR |
+| **G2a** | Canonical `Codec` + canonical decode for the **wire** types (`GossipMessage`, `DhtEntry`), carrying the `(role, version)` descriptor; **G2-T1/T2/T4** over those types ([ADR-0022](../adr/0022-g2-split-wire-and-consensus-encoding.md)) | 🔴 not started |
+| **G5** | 5 nodes mutually authenticate over QUIC with ML-DSA certificates, discover via Kademlia, gossip under 20% loss; **G5-T6** and **G5-T7** green | 🔴 not started — N0 ✅ closed (quinn direct); identity settled by [ADR-0021](../adr/0021-peer-identity-across-libp2p.md); entry is now **G2a** |
 
+> **Layer 0 is complete when G0, G1, G2a and G5 have all closed.**
+>
 > This table is the definition of the term. The audit measuring against it, with the commands
 > behind every status above, is [`../20-completion/`](../20-completion/).
+>
+> *G2a was added 2026-09-30 by [ADR-0022](../adr/0022-g2-split-wire-and-consensus-encoding.md).*
+> The definition previously read **G0 + G1 + G5** while G5's entry condition was G2 — so Layer 0
+> could not complete without a gate its own definition omitted. G2 now splits along the wire/state
+> line: **G2a** (the two types that go on the wire) is Layer 0 and gates G5; **G2b** (`Resource`,
+> `Transaction`, `Block`, `Vote`, BLAKE3 commitments, `TxId`) stays before G3, outside Layer 0.
+> The split is about *which types are encoded when*, never two encoders — there is one `Codec`.
+>
 > *(The G1 row said "24 tests"; the SLH-DSA ignored count is 22 as of `63ad3d5`.)*
 
-At that point L0 is real code rather than primitives, and G2 (canonical encoding) is the next
-gate — outside this plan.
+At that point L0 is real code rather than primitives, and **G2b** (consensus encoding) is the
+next gate — outside this plan, before G3.
 
 ## Keeping this plan honest
 

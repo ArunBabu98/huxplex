@@ -249,9 +249,51 @@ and it is recorded against those.
 moves, no state migrates. That is exactly what this ADR's code-point-level agility buys, and it
 makes the dependency a low-regret call rather than a lock-in.
 
+## Amendment — 2026-09-30: the integration path, confirmed by the N0 spike
+
+This ADR's conditions were written against an assumption about *where* the rustls configuration
+would come from. The [N0 spike](../18-implementation-plan/03-g5-transport.md) settled it on
+2026-09-23, reading vendored sources rather than documentation.
+
+**The load-bearing assumption is confirmed.** `rustls` 0.23.45 defines
+
+```rust
+// draft-ietf-tls-mldsa … IANA considerations
+ML_DSA_44 => 0x0904,   ML_DSA_65 => 0x0905,   ML_DSA_87 => 0x0906,
+```
+
+and wires `webpki_algs::ML_DSA_{44,65,87}` through the `aws-lc-rs` provider — already the provider
+`libp2p-tls` uses. **The code point 0x0904 matches this ADR exactly.** The stop condition was not
+reached: no certificate-extension bridge is needed, and the exporter-binding phase remains
+correctly excluded.
+
+**The integration path changed, and in this ADR's favour.** `libp2p-quic` cannot accept a custom
+rustls configuration (private fields, no setter), so **quinn is driven directly behind libp2p's
+`Transport` trait** ([ADR-0012 amendment](0012-network-transport.md)). Huxplex therefore
+constructs the `rustls::{Client,Server}Config` itself, which makes every condition here
+**directly expressible** rather than something to be coaxed out of a config built for another
+purpose:
+
+| Condition | Effect of the change |
+|---|---|
+| Native ML-DSA certificates, mutual auth, custom verifier | ours to construct; no fork of `libp2p-tls` |
+| ALPN `huxplex/{network}/1` | ours to set — `libp2p-tls` hard-codes `b"libp2p"` |
+| 1-RTT resumption on, 0-RTT off | ours to configure |
+| Client Initial padding / **G5-T6** | far easier to assert on a config we build; the ≈130-byte margin is measurable at the source |
+
+**Peer identity** — the verifier's `SHAKE-256(spki)[..32] == expected PeerId` check is unchanged,
+and is now the *sole authority* for identity; see
+[ADR-0021](0021-peer-identity-across-libp2p.md) rule I5.
+
+> Conditions 1–4 stand unchanged. Condition 3 (the C-toolchain pin, G0-7) now has a **second**
+> toolchain variable beside it: the current libp2p stack requires rustc 1.88 against a pinned
+> 1.85.0. Both are G5-entry work and both feed the reproducible-build recipe; keep them separate
+> so a G0-T2 failure has one cause, not two.
+
 ## Links
 - Amends [ADR-0012](0012-network-transport.md) rules 4 and 5 (does not supersede it — transport,
   discovery and messaging decisions stand)
+- [ADR-0021](0021-peer-identity-across-libp2p.md) — how `PeerId` survives the libp2p boundary
 - [ADR-0018](0018-signature-role-profiles.md) — the `Transport` role/purpose is added under rule V2
 - [ADR-0014](0014-validator-key-management.md) — why the transport key is separate
 - [ADR-0002](0002-cryptographic-parameter-set.md) — suite v1; agility is what makes the code-point

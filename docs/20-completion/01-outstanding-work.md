@@ -5,8 +5,10 @@
 > remaining path to "Layer 0 for v1 is done", in the order it should be done.
 >
 > **Phase A is complete — G0 is closed. Phase B is 5 of 11 — the registry (C1–C5) is in.**
-> Start at **B2 (C6)**, then C9 → C10 → C7/C8 → B5. Two decisions in Phase C block G5 and should
-> be taken in parallel, since neither depends on G1.
+> Start at **B2 (C6)**, then C9 → C10 → C7/C8 → B5. **Both blocking decisions were taken on
+> 2026-09-30** ([ADR-0021](../adr/0021-peer-identity-across-libp2p.md),
+> [ADR-0022](../adr/0022-g2-split-wire-and-consensus-encoding.md)) — nothing left is blocked on a
+> decision.
 >
 > Nothing here is new scope. Every item traces to
 > [`16-action-plan.md`](../16-action-plan.md), [`18-implementation-plan/`](../18-implementation-plan/)
@@ -24,15 +26,21 @@
 | 5 | **B5** — hybrid X25519 + ML-KEM-768 | **G1-T5**, and G5 needs it | — |
 | 6 | **G1-T2** — exhaustive ordered-pair sweep over the context registry | the role sweep is done; the context sweep is not | — |
 | — | **G1 closes** | | |
-| 7 | 🚧 **The identity ADR** — libp2p `PeerId` vs `SHAKE-256(spki)[..32]` | decides the shape of every G5 task | *a decision, not code* |
-| 8 | 🚧 **The G2 ordering question** — Layer 0 is defined as G0+G1+G5, but G5's entry is G2 | Layer 0 as defined cannot close without a gate its definition omits | *a decision, not code* |
-| 9 | **G2** — canonical encoding (if the answer to 8 is "yes, it's in scope") | also the only way G1-T6 fully closes | 8 |
-| 10 | **N0b, N1–N11** — the transport | | 7, 9 |
+| ✅ | ~~The identity ADR~~ — **taken**: [ADR-0021](../adr/0021-peer-identity-across-libp2p.md), one identity in two encodings | N1 unblocked | *done 2026-09-30* |
+| ✅ | ~~The G2 ordering question~~ — **taken**: [ADR-0022](../adr/0022-g2-split-wire-and-consensus-encoding.md), G2a/G2b split | Layer 0 = G0+G1+**G2a**+G5 | *done 2026-09-30* |
+| 7 | **G2a** — canonical `Codec` + canonical decode for `GossipMessage` and `DhtEntry`, carrying the `(role, version)` descriptor | G5's entry condition; also where **G1-T6** finally closes | G1 |
+| 8 | **N0b, N1–N11** — the transport | | 7 |
 | — | **G5 closes → Layer 0 complete** | | |
 
-**Steps 7 and 8 are decisions, and both are on the critical path.** Neither depends on G1, so
-both can be taken now, in parallel with steps 1–6. Leaving them until G5 starts is how a gate
-stalls at its first task.
+**Nothing on this path is blocked on a decision any more.** The two that were — peer identity
+and the G2 ordering gap — were taken on 2026-09-30 and are recorded as ADR-0021 and ADR-0022.
+Everything remaining is implementation, in the order above.
+
+> **Why G2a moved into Layer 0.** The definition read G0+G1+G5 while G5's entry condition was G2,
+> so Layer 0 could not complete without a gate its own definition omitted. G2 now splits along
+> the wire/state line — G2a is the two types that go on the wire, and it is the *only* encoding
+> work Layer 0 needs. The `DhtEntry` forgery was the cost of not having that discipline before
+> the envelope code shipped.
 
 Two follow-ons that are not Layer 0 but are unblocked by it: **C10 unblocks
 [issue #12](https://github.com/ArunBabu98/huxplex/issues/12)** (the digest-stack upgrade, which
@@ -256,7 +264,7 @@ convention); SLH-DSA green and un-ignored; KATs committed and green on both arch
 
 ---
 
-## Phase C — G5 · transport · *blocked on two decisions, not on code*
+## Phase C — G5 · transport · *entry is now G2a*
 
 > **Entry:** G2 (canonical encoding) — which is outside Layer 0 and outside this file. G5 is listed
 > here because Layer 0 is not complete without it, not because it can start next.
@@ -281,7 +289,7 @@ convention); SLH-DSA green and un-ignored; KATs committed and green on both arch
         libp2p-tls already uses. **The stop condition was not reached** — no certificate-extension
         bridge is needed.
 
-### C0b · 🚧 **BLOCKER — the identity ADR** *(write before N1)*
+### C0b · The identity question ✅ *resolved 2026-09-30 — [ADR-0021](../adr/0021-peer-identity-across-libp2p.md)*
 
 The spike surfaced something outside its original framing and more consequential than the crate
 choice. `libp2p-core` hands the swarm `(PeerId, StreamMuxerBox)` typed on
@@ -289,16 +297,34 @@ choice. `libp2p-core` hands the swarm `(PeerId, StreamMuxerBox)` typed on
 `SHAKE-256(ML-DSA-44 pk)[..32]` (wire spec §4, `peer.rs`, asserted by **G5-T2**). GossipSub and
 Kademlia are generic over libp2p's.
 
-- [ ] **Decide and record an ADR.** Three options, with consequences:
+- [x] **Decided and recorded:** option (c) — **one identity, two encodings**.
 
-| Option | Consequence |
-|---|---|
-| **(a)** adopt libp2p's `PeerId` | keeps GossipSub + Kademlia unmodified; contradicts ADR-0019, the wire spec, `peer.rs` and G5-T2, and makes identity depend on Ed25519 in a PQ chain — self-defeating |
-| **(b)** Huxplex `PeerId` end-to-end, own gossip + DHT | fully consistent with ADR-0019; abandons libp2p's battle-tested GossipSub scoring that **G5-T3** leans on; much the largest scope |
-| **(c)** dual identity with a proven binding — libp2p `PeerId` for the swarm, Huxplex `PeerId` at the application layer, bound by the ML-DSA certificate and verified at `Identified` | pragmatic; the binding becomes a security-critical invariant needing its own gate test |
+(a) was rejected because it anchors peer identity on Ed25519 in a post-quantum chain: a CRQC
+would not break consensus signatures but *would* break Sybil resistance and DHT record
+authorisation. (b) was rejected on cost — it abandons libp2p's GossipSub scoring, which **G5-T3**
+leans on. A fourth option, forking `libp2p-identity` to add an ML-DSA key type, was rejected as
+unnecessary once (c) turned out to need no fork.
 
-> **(c)** looks likeliest, but it is an ADR, not a choice to make inside an implementation PR.
-> **Nothing else in G5 should start until this is settled** — it decides the shape of N1–N11.
+**(c) is cheaper than it first looked.** It is not a dual identity:
+
+```
+libp2p PeerId = 0x00 ‖ 0x20 ‖ <32-byte Huxplex PeerId>     // identity-coded multihash
+```
+
+`PeerId::from_multihash` is public and accepts identity-coded digests up to 42 bytes, so the
+libp2p form is a **lossless re-encoding** of the Huxplex `PeerId` — verified round-tripping
+against the real crate. There is no binding to prove, because the relationship is definitional
+rather than cryptographic, and **ADR-0012 rule 5 is satisfied as written** rather than amended.
+
+Available *because* N0 chose outcome 3: Huxplex constructs the `(PeerId, StreamMuxerBox)` pair
+itself. Under `libp2p-quic` it would not be — recorded as a standing condition, not an assumption.
+
+**Carry into N0b/N2 as acceptance criteria** (ADR-0021 rules I1–I5), in particular:
+- [ ] **I3** — conversion is total and lossless, asserted in **both** directions.
+- [ ] **I4** — compile-time assertion that the Huxplex `PeerId` stays ≤ 42 bytes, so a future
+      hash change fails the build rather than the network.
+- [ ] **I5** — the TLS verifier is the sole authority; the libp2p `PeerId` is derived from its
+      verified output, never trusted as received.
 
 ### C0c · New from the spike
 

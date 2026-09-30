@@ -15,15 +15,20 @@
 
 The project's own definition of the term is the three-row table in
 [`18-implementation-plan/04-sequencing-and-risks.md`](../18-implementation-plan/04-sequencing-and-risks.md#what-layer-0-complete-means):
-Layer 0 is complete when **G0**, **G1** and **G5** have all closed. Measured against it:
+Layer 0 is complete when **G0**, **G1**, **G2a** and **G5** have all closed — G2a added
+2026-09-30 by [ADR-0022](../adr/0022-g2-split-wire-and-consensus-encoding.md), which resolved the
+ordering gap §5.2 records. Measured against it:
 
 | | Criterion (verbatim from that table) | Reality | |
 |---|---|---|---|
 | **G0** | Workspace split; dual-architecture CI green; reproducible builds demonstrated by an automated two-build comparison; no secret printable via `Debug` | Workspace ✅ · reproducibility ✅ · `Debug` ✅ · **CI green on three architectures** ✅ | 🟢 **CLOSED** |
 | **G1** | Registry is the only path to a primitive; SLH-DSA green with 24 tests un-ignored; KATs byte-exact on both architectures; G1-T1 and G1-T6 green | Registry ✅ and mechanically enforced (C1–C5). Still no SLH-DSA, no KAT fixtures, no hybrid KEX. 5 of 11 tasks | 🟦 |
-| **G5** | 5 nodes mutually authenticate over QUIC with ML-DSA certificates, discover via Kademlia, gossip under 20% loss; G5-T6 and G5-T7 green | No transport, no swarm, no TLS, no peer state machine. N0 spike ✅ closed 2026-09-23 (answer: drive quinn directly); N1 blocked on an identity ADR | 🔴 |
+| **G2a** | Canonical `Codec` + canonical decode for the **wire** types, carrying the `(role, version)` descriptor | Not started. Added to the Layer-0 definition 2026-09-30 by [ADR-0022](../adr/0022-g2-split-wire-and-consensus-encoding.md) | 🔴 |
+| **G5** | 5 nodes mutually authenticate over QUIC with ML-DSA certificates, discover via Kademlia, gossip under 20% loss; G5-T6 and G5-T7 green | No transport, no swarm, no TLS, no peer state machine. N0 ✅ closed (drive quinn directly); identity settled by [ADR-0021](../adr/0021-peer-identity-across-libp2p.md); entry is now **G2a** | 🔴 |
 
-One gate closed, one in progress, one blocked on a decision. **Roughly 45% of Layer 0 exists.**
+One gate closed, one in progress, two not started. **Roughly 35% of Layer 0 exists** — the
+figure fell not because work was lost but because [ADR-0022](../adr/0022-g2-split-wire-and-consensus-encoding.md)
+added G2a to a denominator that had been understated.
 
 A second, wider reading of the question — *is v1 complete?* — resolves the same way and more
 emphatically: v1 is the 3–5 node devnet of
@@ -287,8 +292,9 @@ normative in [wire spec §4](../15-specifications/05-network-wire-protocol.md) a
 which is free now and would not have been once a network existed.
 
 > **The transferable lesson.** Ad-hoc concatenation of variable-length fields is not a neutral
-> shortcut; it is an encoding decision, and an ambiguous one. This is an argument for doing G2
-> earlier rather than later — see §5.2 on the ordering problem.
+> shortcut; it is an encoding decision, and an ambiguous one. This was the argument for doing the
+> wire half of G2 earlier — and it is why [ADR-0022](../adr/0022-g2-split-wire-and-consensus-encoding.md)
+> now places **G2a before G5**. See §5.2.
 
 ### 5.2 An ordering gap in the definition of "Layer 0 complete"
 
@@ -304,17 +310,37 @@ G0 closed
             └→ G5 (N0 first, then N1…N11)
 ```
 
-So Layer 0, as defined, cannot complete without a gate its own definition omits. Either G2 is de
-facto part of Layer 0, or G5's dependency on it needs re-examining. This is a decision to take
-deliberately rather than discover midway through G5.
+So Layer 0, as defined, could not complete without a gate its own definition omitted.
 
-§5.1 is evidence for taking it sooner: a canonical-encoding defect was already live in shipped
-envelope code, and the spec had blessed it. The encoding discipline G2 would have imposed was
-needed before G5, not after.
+§5.1 was the evidence for resolving it sooner rather than later: a canonical-encoding defect was
+already live in shipped envelope code, and the spec had blessed it. The discipline G2 exists to
+impose was needed *before* G5, not after.
 
-**What is unblocked regardless:** **N0**, the entry spike, is pure investigation with no code in
-the tree, and the sequencing doc explicitly lists it as startable immediately. Nothing else in
-G5 should begin before the G2 question is settled.
+#### ✅ RESOLVED 2026-09-30 — [ADR-0022](../adr/0022-g2-split-wire-and-consensus-encoding.md)
+
+G2 splits along the **wire/state line**, because G5 needs two of G2's six types and never touches
+the other four:
+
+| Gate | Types | Tests | In Layer 0? |
+|---|---|---|---|
+| **G2a** | `GossipMessage`, `DhtEntry`, carrying the `(role, version)` descriptor | G2-T1, G2-T2, G2-T4 | **yes** — gates G5 |
+| **G2b** | `Resource`, `Transaction`, `Block`, `Vote`; BLAKE3, `TxId`, witness exclusion | + **G2-T3** | no — before G3 |
+
+**Layer 0 is now G0 + G1 + G2a + G5**, which is achievable as stated. `G2-T3` (`TxId` excludes
+witnesses) belongs to G2b alone, because `TxId` does not exist at G5.
+
+Two consequences worth holding onto:
+
+- **One `Codec` across both halves.** The split is about *which types are encoded when*, never
+  two encoders — two would be two dialects, which is the fork risk the gate exists to prevent.
+- **G2a freezes the wire encoding**, so `GossipMessage` and `DhtEntry` must carry the descriptor
+  from their first canonical encoding. Freezing a wire format that cannot express it would
+  recreate, on the wire types, the state-migration trap ADR-0018 exists to avoid on the consensus
+  types. This is the one thing to get right in G2a — and it is possible only because the
+  descriptor shipped with the G1 registry first.
+
+Recorded as an amendment to [ADR-0011](../adr/0011-canonical-serialization.md) (rule 3′) as well,
+since that ADR predates the role axis.
 
 ### 5.3 What exists today
 
@@ -416,7 +442,7 @@ and **Layer 0**. The first half is closed. The second half is G1 and G5.
 > Layer 0 for v1 is **not complete**. **G0 is closed** — green on three architectures, with a
 > negative case proving the guard works. **G1 is roughly half done** — the agility registry is
 > built and mechanically enforced; SLH-DSA, the KATs and the hybrid KEX are not. **G5 has not
-> started** and its first implementation task is blocked on an identity ADR. What exists is a
+> started**, though its blocking decisions are now taken. What exists is a
 > post-quantum primitive layer behind a working agility registry, not the Layer-0 substrate.
 
 One of three gates. The next action is **G1**, and its first task is the registry — not

@@ -128,6 +128,42 @@ TLS handshake natively. The remaining integration risk — whether `libp2p-quic`
 rustls configuration, or whether quinn must be driven directly behind libp2p's transport trait —
 is a **G5 entry spike**, not an architecture question.
 
+## Amendment — 2026-09-30: the entry spike ran; rules 1–3 and 5 all stand
+
+The **N0 spike** deferred above was run on 2026-09-23 against vendored sources
+([finding](../18-implementation-plan/03-g5-transport.md)). Two results:
+
+**1. `libp2p-quic` cannot be used — quinn is driven directly behind libp2p's `Transport` trait.**
+`libp2p_quic::Config` keeps its TLS configs in private fields with no setter, built internally
+from `libp2p_tls::make_*_config`. The "small `libp2p-tls` fork" alternative fails for a different
+reason than expected: those functions take `&libp2p_identity::Keypair`, and `KeyType` is
+`{Ed25519, RSA, Secp256k1, Ecdsa}` — an ML-DSA key cannot travel through that signature at all, so
+the fork cascades into `libp2p-identity`.
+
+This changes **how** rule 1 is implemented, not what it decided. QUIC is still the transport;
+Kademlia (rule 2) and GossipSub (rule 3) are unaffected, because they sit above the transport.
+
+**2. Rule 5 is satisfiable as written, and is now satisfied.** The spike surfaced the real risk to
+it: `libp2p-core` types the swarm on `libp2p_identity::PeerId`, which cannot represent an ML-DSA
+key. [ADR-0021](0021-peer-identity-across-libp2p.md) resolves this without amending rule 5 —
+the libp2p `PeerId` is an identity-coded multihash wrapping the Huxplex `PeerId`, i.e. a lossless
+re-encoding of the same identity rather than a second one. Available precisely *because* quinn is
+driven directly, so Huxplex constructs the `(PeerId, StreamMuxerBox)` pair itself.
+
+| Rule | Status after the spike |
+|---|---|
+| 1 Transport (QUIC primary) | ✅ stands — implemented via quinn directly, not `libp2p-quic` |
+| 2 Discovery (Kademlia, signed `DhtEntry`) | ✅ stands |
+| 3 Messaging (GossipSub + signed envelopes) | ✅ stands |
+| 4 Handshake | ⚠️ superseded by ADR-0019 (above) |
+| **5 Identity** | ✅ **stands as written** — mechanism in [ADR-0021](0021-peer-identity-across-libp2p.md) |
+| 6 Peer lifecycle in the wire spec | ✅ stands |
+
+> One cost to carry forward: the current libp2p stack requires **rustc 1.88**, while
+> `rust-toolchain.toml` pins **1.85.0**. The toolchain bump is an input to the reproducible-build
+> recipe, so **G0-T2 must be re-verified** at G5 entry — alongside, and kept separate from, the
+> `aws-lc-rs` C-toolchain pin (G0-7).
+
 ## Links
 - Amended by [ADR-0019](0019-transport-authentication.md) (transport authentication)
 - [networking architecture](../02-architecture/networking.md),

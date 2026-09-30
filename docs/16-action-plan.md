@@ -23,8 +23,8 @@ Verified by reading `src/` and running the test suite, not by reading docs.
 | Fact | Evidence |
 |---|---|
 | ~1,260 lines of implementation across `crates/hux-crypto/src/` and `crates/hux-network/src/`, plus ~2,270 lines of `#[cfg(test)]` API-contract modules for unimplemented primitives | `wc -l` over `src/`, excluding `lb_vrf`/`pq_ssle`/`slh_dsa`/`zk_stark` |
-| ~4,800 lines of **tests** across `crates/*/tests/` and co-located gated suites | `wc -l crates/*/tests/*.rs` |
-| **Build is green** — **133 passed, 0 failed, 81 ignored** on **three architectures**; reproducible release builds verified | `./scripts/verify-layer0.sh --full` locally (12/12), and the CI matrix on `x86_64` / `aarch64` / `arm64`. Walkthrough output is byte-identical across all three |
+| ~2,930 lines of **tests** in `crates/*/tests/`, plus the co-located gated suites inside the contract modules | `wc -l crates/*/tests/*.rs` |
+| **Build is green** — **133 passed, 0 failed, 81 ignored** on **three architectures**; reproducible release builds verified | `./scripts/verify-layer0.sh --full` locally (13/13), and the CI matrix on `x86_64` / `aarch64` / `arm64`. Walkthrough output is byte-identical across all three |
 | 81 ignored tests are conformance suites for four unimplemented primitives | `slh_dsa` 22 (G1), `lb_vrf` 17 + `pq_ssle` 16 (G6+), `zk_stark` 26 (G10) — each `#[ignore]` names its gate |
 | No ledger, no consensus, no VM, no storage, no transport, no tokens, no agents | absence across `crates/` |
 | Connectors are now specified but unbuilt | [07-connector-protocol](15-specifications/07-connector-protocol.md), [ADR-0015](adr/0015-connector-architecture.md), [ADR-0016](adr/0016-evidence-and-attestation.md) |
@@ -32,15 +32,17 @@ Verified by reading `src/` and running the test suite, not by reading docs.
 > **G0 was completed on 2026-09-12.** Previously `cargo test` did not compile at all
 > (3 × `E0433`, 5 × `E0432`, 1 × `E0121`), so none of the authored tests protected anything.
 > The root cause of the architecture failure was `mlkem768::avx2::*` hardcoded in
-> what is now `crates/hux-crypto/src/kem.rs` — AVX2 is x86-64 only and does not exist on `aarch64`.
+> what is now `crates/hux-crypto/src/kem/ml_kem.rs` — AVX2 is x86-64 only and does not exist on `aarch64`.
 > See G0 below for what changed and what remains.
 
 > **Where the project actually stands**, audited against this plan on 2026-09-23:
-> [`20-completion/`](20-completion/). Short version — **Layer 0 is roughly 45% complete**: G0
+> [`20-completion/`](20-completion/). Short version — **Layer 0 is roughly 35% complete**: G0
 > is **closed** (CI green on three architectures, with byte-identical derived values and a working
 > negative case). **G1 is in progress** — the agility registry (C1–C5) is built and mechanically
 > enforced; C6–C11 (sizes, SLH-DSA, the signing split, KATs, hybrid KEX) are open. **G5 has not
-> started**, and its N0 spike found that its first implementation task is blocked on an identity ADR.
+> started**; its N0 spike is closed, the identity question is settled by [ADR-0021](adr/0021-peer-identity-across-libp2p.md),
+> and its entry condition is now **G2a** ([ADR-0022](adr/0022-g2-split-wire-and-consensus-encoding.md)),
+> which joins Layer 0.
 
 **Read this honestly:** the repository is a *spec-test-first* project. The founder has
 written extensive conformance tests ahead of the implementations — including full FIPS 205
@@ -73,9 +75,10 @@ pass for the right reason.
 ```mermaid
 graph TD
     G0["G0 · Repo health<br/>build is green"] --> G1["G1 · Crypto core<br/>+ agility registry"]
-    G1 --> G2["G2 · Canonical encoding<br/>+ data model"]
-    G2 --> G3["G3 · HRM state<br/>single-node ledger"]
-    G2 --> G5["G5 · Transport<br/>libp2p/QUIC + PQ handshake"]
+    G1 --> G2A["G2a · Wire encoding<br/>GossipMessage, DhtEntry"]
+    G1 --> G2B["G2b · Consensus encoding<br/>Resource, Tx, Block, Vote"]
+    G2B --> G3["G3 · HRM state<br/>single-node ledger"]
+    G2A --> G5["G5 · Transport<br/>libp2p/QUIC + PQ handshake"]
     G3 --> G4["G4 · HuxVM execution"]
     G3 --> G6
     G4 --> G6["G6 · Q-BFT consensus"]
@@ -89,19 +92,27 @@ graph TD
     G8 --> G12["G12 · Governance & constitution"]
 
     classDef v1 fill:#1f6f43,stroke:#0d3b24,color:#fff
+    classDef l0 fill:#1f6f43,stroke:#0d3b24,color:#fff,stroke-width:3px
     classDef north fill:#5b3fa8,stroke:#2f1f5c,color:#fff
-    class G0,G1,G2,G3,G4,G5,G6,G7 v1
+    class G0,G1,G2A,G2B,G3,G4,G5,G6,G7 v1
+    class G0,G1,G2A,G5 l0
     class G10,G11,G12 north
 ```
 
-**Green = the v1 critical path.** Purple = the founder's north star; not before G7.
+**Green = the v1 critical path; thick-bordered = Layer 0** (G0, G1, G2a, G5). Purple = the
+founder's north star; not before G7.
 
 ### Critical path and parallelism
 
 ```
-G0 → G1 → G2 → G3 → G4 → G6 → G7      (the binding sequence)
-                └─ G5 ─────┘           (transport runs in parallel with G3/G4)
+G0 → G1 → G2b → G3 → G4 → G6 → G7     (the binding sequence)
+      └─→ G2a → G5 ──────────┘          (transport runs in parallel with G3/G4)
 ```
+
+**Layer 0 is `G0 + G1 + G2a + G5`** — the thick-bordered nodes above
+([ADR-0022](adr/0022-g2-split-wire-and-consensus-encoding.md)). G2 splits along the wire/state
+line: G2a is the two types that go on the wire and gates G5; G2b is the consensus types and gates
+G3. **One `Codec` across both** — the split is which types are encoded when, never two encoders.
 
 - **G5 (transport) is the only meaningful parallel track before G7.** If there are two
   people, one takes G3→G4, the other takes G5.
@@ -212,12 +223,26 @@ KATs committed; G1-T1 demonstrated in CI.
 
 ---
 
-## G2 · Canonical encoding and the data model
+## G2 · Canonical encoding and the data model — **split into G2a / G2b**
 
 > Two nodes that serialize the same object differently will fork. This gate is small,
 > unglamorous, and load-bearing for everything after it.
 
-**Unblocks:** G3, G5. **Entry:** G1.
+> **Split 2026-09-30 by [ADR-0022](adr/0022-g2-split-wire-and-consensus-encoding.md).** G5 needs
+> canonical encoding for the two types that go **on the wire**; it never touches `TxId`,
+> nullifiers or BLAKE3. Splitting along the wire/state line lets G5 depend on a small, bounded
+> prerequisite instead of the whole gate — and puts **G2a inside Layer 0**, which is what makes
+> the Layer-0 definition achievable at all.
+>
+> | | Types | Tests | Entry | Unblocks |
+> |---|---|---|---|---|
+> | **G2a** wire | `GossipMessage`, `DhtEntry`, carrying the `(role, version)` descriptor | G2-T1, G2-T2, G2-T4 | G1 | **G5** |
+> | **G2b** consensus | `Resource`, `Transaction`, `Block`, `Vote`; BLAKE3, `TxId`, witness exclusion | G2-T1, G2-T2, **G2-T3**, G2-T4 | G1 | G3 |
+>
+> **One `Codec` across both.** The split is *which types are encoded when*, never two encoders —
+> two would be two dialects, which is the fork risk the gate exists to prevent.
+
+**Unblocks:** G3 (via G2b), G5 (via G2a). **Entry:** G1.
 
 ### Work
 
@@ -232,7 +257,7 @@ and [ADR-0011](adr/0011-canonical-serialization.md): canonical `Codec` (postcard
 |---|---|---|
 | **G2-T1** | **Round-trip and re-encode stability.** For every consensus type, `decode(encode(x)) == x` **and** `encode(decode(bytes)) == bytes` | The second half is the one that matters: it forbids two byte-strings decoding to the same value, which is the classic consensus-fork bug |
 | **G2-T2** | **Non-canonical encodings are rejected at decode.** Hand-crafted alternate encodings of a valid object are refused | Without this, an attacker mints two valid `TxId`s for one transaction |
-| **G2-T3** | **`TxId` excludes witnesses.** Mutating only the signature field leaves `TxId` unchanged | Prerequisite for post-finality signature pruning, which is load-bearing for PQ signature bloat (risk #2) |
+| **G2-T3** *(G2b only)* | **`TxId` excludes witnesses.** Mutating only the signature field leaves `TxId` unchanged | Prerequisite for post-finality signature pruning, which is load-bearing for PQ signature bloat (risk #2). `TxId` does not exist at G5, so this belongs to G2b |
 | **G2-T4** | Differential fuzz: 10⁶ random byte-strings never panic and never decode into two distinct values | Decoders are the largest untrusted-input surface in the node |
 
 **Exit:** all consensus types canonical; fuzz target in CI; G2-T3 proven.
@@ -241,7 +266,7 @@ and [ADR-0011](adr/0011-canonical-serialization.md): canonical `Codec` (postcard
 
 ## G3 · HRM state and the single-node ledger
 
-**Unblocks:** G4, G6. **Entry:** G2.
+**Unblocks:** G4, G6. **Entry:** **G2b** (the consensus-encoding half — [ADR-0022](adr/0022-g2-split-wire-and-consensus-encoding.md)).
 
 ### Work
 
@@ -302,7 +327,7 @@ functions; the TCHAO conflict-graph scheduler
 > Runs **in parallel** with G3/G4. Today `crates/hux-network/` defines message *types* only — there
 > is no swarm, no transport, no peer state machine.
 
-**Unblocks:** G6. **Entry:** G2.
+**Unblocks:** G6. **Entry:** **G2a** (not the whole of G2 — [ADR-0022](adr/0022-g2-split-wire-and-consensus-encoding.md)).
 
 ### Work
 
@@ -311,12 +336,27 @@ and [ADR-0012](adr/0012-network-transport.md): libp2p/QUIC transport; hybrid
 X25519 + ML-KEM-768 handshake with ML-DSA-44 authentication; GossipSub with the existing
 signed envelopes; Kademlia DHT with signed entries; peer scoring and rate limits.
 
-**🔬 Entry spike (blocks the rest of G5):** does `libp2p-quic` accept a custom rustls
-configuration carrying an **ML-DSA-44 certificate** and a custom cert verifier — or must quinn be
-driven directly behind libp2p's transport trait, or `libp2p-tls` forked? `libp2p_quic::Config`
-builds its TLS config internally. Timebox it; the answer decides how much of G5 is integration
-versus implementation. If blocked, fall back to the certificate-extension bridge recorded in
-[ADR-0019](adr/0019-transport-authentication.md) — **never** the exporter-binding phase.
+**🔬 Entry spike — ✅ CLOSED 2026-09-23.** *Does `libp2p-quic` accept a custom rustls
+configuration carrying an ML-DSA-44 certificate and a custom cert verifier — or must quinn be
+driven directly, or `libp2p-tls` forked?*
+
+**Answer: quinn is driven directly behind libp2p's `Transport` trait** (outcome 3). `libp2p-quic`
+keeps its TLS configs in private fields with no setter; the `libp2p-tls` fork route is closed too,
+because `make_*_config` take a `libp2p_identity::Keypair` and `KeyType` has **no ML-DSA variant**,
+so the fork cascades into `libp2p-identity`. The certificate-extension fallback was **not**
+needed, and the exporter-binding phase stays correctly excluded. Full finding:
+[`18-implementation-plan/03-g5-transport.md`](18-implementation-plan/03-g5-transport.md).
+
+Two decisions came out of it, both now recorded:
+
+- **[ADR-0021](adr/0021-peer-identity-across-libp2p.md)** — libp2p types the swarm on its own
+  `PeerId`, which cannot hold an ML-DSA key. Resolved *without* amending ADR-0012 rule 5: the
+  libp2p `PeerId` is an identity-coded multihash wrapping Huxplex's, i.e. **one identity in two
+  encodings**, no fork, no binding to prove.
+- **[ADR-0019 amendment](adr/0019-transport-authentication.md)** — the ADR's load-bearing
+  assumption is confirmed at the source (`rustls` 0.23.45 defines `ML_DSA_44 => 0x0904`), and
+  owning the rustls config makes ALPN, mutual auth, 0-RTT-off and the **G5-T6** amplification
+  margin directly expressible rather than coaxed out of a config built for another purpose.
 
 Then implement [ADR-0019](adr/0019-transport-authentication.md):
 
