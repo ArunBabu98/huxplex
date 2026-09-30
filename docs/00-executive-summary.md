@@ -46,8 +46,9 @@ no P2P transport, no tokens, no agents, no governance.** The networking module d
 message *types* but no actual swarm, transport, or peer state machine.
 
 > **Where that sits against the plan**, audited continuously in [`20-completion/`](20-completion/):
-> Layer 0 is **G0 + G1 + G5**, and it is roughly **45%** done — G0 closed, G1 about half built,
-> G5 not started. T0 has been left behind; T1 has not been reached.
+> Layer 0 is **G0 + G1 + G2a + G5** ([ADR-0022](adr/0022-g2-split-wire-and-consensus-encoding.md)),
+> and it is roughly **35%** done — G0 closed, G1 about half built, G2a and G5 not started.
+> T0 has been left behind; T1 has not been reached.
 
 ## 3. What is claimed but does not exist (🟡 / 🔴 the gap)
 

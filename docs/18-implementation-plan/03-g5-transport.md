@@ -1,7 +1,7 @@
 # 03 — G5 · Transport and the P2P layer
 
-> **Entry:** G2 (canonical encoding). Runs **in parallel** with G3/G4 — it is the only meaningful
-> parallel track before G7.
+> **Entry:** **G2a** (wire-encoding half of G2 — [ADR-0022](../adr/0022-g2-split-wire-and-consensus-encoding.md)).
+> Runs **in parallel** with G3/G4 — it is the only meaningful parallel track before G7.
 >
 > Today `hux-network` defines message *types* only: no swarm, no transport, no peer state
 > machine. Implements [ADR-0012](../adr/0012-network-transport.md) (libp2p/QUIC, Kademlia,
@@ -121,10 +121,33 @@ reconcile the *identity* the libp2p behaviours are generic over.
 |---|---|
 | **(a)** Adopt libp2p's `PeerId` | Keeps GossipSub + Kademlia unmodified. Contradicts ADR-0019, the wire spec, `peer.rs` and **G5-T2**; makes identity depend on Ed25519 in a PQ chain — self-defeating |
 | **(b)** Huxplex `PeerId` end-to-end, own gossip + DHT | Fully consistent with ADR-0019. Abandons libp2p's battle-tested GossipSub scoring, which **G5-T3** (bounded amplification) leans on. Much the largest scope |
-| **(c)** Dual identity with a proven binding — libp2p `PeerId` for the swarm, Huxplex `PeerId` at the application layer, bound by the ML-DSA certificate and verified at `Identified` | Pragmatic. Cost is a second identity and the binding proof; that binding becomes a security-critical invariant needing its own gate test |
+| **(c)** Huxplex `PeerId` carried across the boundary, with libp2p holding a form of it | Pragmatic — and, once checked, far cheaper than this table assumed |
 
-**(c)** looks the most likely answer, but it is a genuine ADR, not a choice to make inside an
-implementation PR. **Write it before N1.**
+#### ✅ RESOLVED 2026-09-30 — [ADR-0021](../adr/0021-peer-identity-across-libp2p.md)
+
+**Option (c), and it is not a dual identity at all.** The finding above assumed (c) meant two
+identities plus a cryptographic binding to defend. Checking `libp2p-identity`'s public API showed
+otherwise:
+
+```
+PeerId::from_bytes(0x00 ‖ 0x20 ‖ <32-byte Huxplex PeerId>)
+  → libp2p PeerId : 1AeFG5tBDEFVB4HGHZJPahwjnCeNzMpEHY4Yz3e7oFWCwR
+  → round-trips   : true
+  → recovers hux  : true
+```
+
+`PeerId::from_multihash` is public and accepts identity-coded (`0x00`) digests up to 42 bytes.
+So the libp2p `PeerId` is a **lossless re-encoding** of the Huxplex one — one identity, two
+encodings. There is no binding to prove, because the relationship is definitional rather than
+cryptographic; no fork of `libp2p-identity`; and **ADR-0012 rule 5 is satisfied as written**
+rather than amended.
+
+This is available *because* outcome 3 puts Huxplex in charge of constructing the
+`(PeerId, StreamMuxerBox)` pair. Under `libp2p-quic` it would not be.
+
+Rules **I1–I5** in ADR-0021 are acceptance criteria for N0b and N2 — in particular **I4**, a
+compile-time assertion that the Huxplex `PeerId` stays ≤ 42 bytes, so a future hash change fails
+the build rather than the network.
 
 #### Consequences for the rest of G5
 
@@ -135,15 +158,23 @@ implementation PR. **Write it before N1.**
   built for us.
 - **Add `quinn` 0.11 as a direct dependency**; `libp2p-quic` is no longer the transport.
   `rustls` 0.23.45 (`aws-lc-rs`, non-FIPS), per ADR-0019 conditions 1–2.
-- **ADR-0019 needs an amendment** recording outcome 3 and the reason outcome 2 failed
-  (libp2p-identity, not libp2p-tls).
+- ✅ **ADR-0019 amended** (2026-09-30) with outcome 3 and the reason outcome 2 failed
+  (libp2p-identity, not libp2p-tls); [ADR-0012](../adr/0012-network-transport.md) amended to
+  record that rules 1–3 and 5 all stand.
 - **G0-7 (the C-toolchain pin) activates**: `aws-lc-rs` enters the tree with this work, so
   `scripts/check-reproducible.sh` must be re-verified as the first acceptance step — sequencing
   rule 3, and stop condition **R4** if it cannot be met.
 
 #### Status
 
-**N0 is closed.** N1 is blocked on the identity ADR above, not on further investigation.
+**N0 is closed, and so is the decision it surfaced.** N1's remaining prerequisite is **G2a**
+([ADR-0022](../adr/0022-g2-split-wire-and-consensus-encoding.md)) — the wire-encoding half of G2 —
+not further investigation.
+
+One cost to carry into G5 entry: `libp2p-identity` 0.3.0 requires **rustc 1.88** while
+`rust-toolchain.toml` pins **1.85.0**. That bump feeds the reproducible-build recipe, so **G0-T2
+must be re-verified** — kept separate from the `aws-lc-rs` C-toolchain pin (G0-7), so a failure
+has one cause rather than two.
 
 ---
 
@@ -153,13 +184,20 @@ implementation PR. **Write it before N1.**
 
 | ID | Task | Acceptance |
 |---|---|---|
-> **Blocked on the identity ADR** from the N0 finding above — libp2p's `PeerId` and Huxplex's
-> `SHAKE-256(spki)[..32]` are different identities, and which one the swarm carries decides the
-> shape of N1–N11. Write that ADR first.
+> ✅ **Unblocked 2026-09-30.** The identity question is settled by
+> [ADR-0021](../adr/0021-peer-identity-across-libp2p.md): **one identity, two encodings** — the
+> libp2p `PeerId` is an identity-coded multihash (`0x00 ‖ 0x20 ‖ <32 bytes>`) wrapping the Huxplex
+> `PeerId`. No fork, no second identity, no binding to prove, and ADR-0012 rule 5 is satisfied as
+> written rather than amended. Its rules **I1–I5** are acceptance criteria for N0b and N2.
+>
+> **Remaining entry condition: G2a**, the wire-encoding half of G2
+> ([ADR-0022](../adr/0022-g2-split-wire-and-consensus-encoding.md)). G5 writes wire types, and
+> wire types need a frozen canonical encoding first — that ordering is what the `DhtEntry`
+> forgery cost us for not having.
 
 | **N0b** ⬜ | *(new, from the N0 finding)* Drive `quinn` 0.11 behind libp2p's `Transport` trait; add `quinn` + `rustls` 0.23.45 as direct dependencies. `libp2p-quic` is not the transport | A QUIC connection established with a Huxplex-constructed `rustls::{Client,Server}Config` |
 | **N1** ⬜ | Generate a self-signed X.509 cert: SPKI = ML-DSA-44 public key, self-signature ML-DSA-44, `SignatureScheme` `mldsa44` = **0x0904** ✅ *confirmed present in rustls 0.23.45* | Cert parses in rustls; key is the `Transport` purpose (`m/44'/931931'/4'/0'/{i}'`) 🟢 |
-| **N2** ⬜ | Custom `ServerCertVerifier` / `ClientCertVerifier`: verify self-signature → `SHAKE-256(spki)[..32]` → compare to expected `PeerId` → abort on mismatch. **No CA, no trust store, no name checking, no revocation** | **G5-T1**, **G5-T2** |
+| **N2** ⬜ | Custom `ServerCertVerifier` / `ClientCertVerifier`: verify self-signature → `SHAKE-256(spki)[..32]` → compare to expected `PeerId` → abort on mismatch. **No CA, no trust store, no name checking, no revocation.** This verifier is the *sole authority* for identity ([ADR-0021](../adr/0021-peer-identity-across-libp2p.md) I5); the libp2p `PeerId` is derived from its verified output, never trusted as received | **G5-T1**, **G5-T2** |
 | **N3** ⬜ | **Mutual** authentication — responder sends `CertificateRequest`; an unauthenticated peer never reaches an application stream | Part of G5-T1 |
 | **N4** ⬜ | ALPN `huxplex/{network}/1`; QUIC refuses cross-network dials | Part of G5-T1 |
 | **N5** ⬜ | Pin `rustls` ≥ 0.23.44 with the `aws-lc-rs` provider, **non-FIPS**; `deny.toml` entries | ADR-0019 conditions 1–2 |

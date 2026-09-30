@@ -53,12 +53,14 @@ finished.
 | **QUIC transport, TLS with ML-DSA certs, live DHT, GossipSub** | 🟡 gate **G5** | ❌ not yet |
 | Consensus, state, VM, tokens, agents | 🟡 later gates | ❌ not yet |
 
-**Layer 0 is complete only when G0, G1 and G5 all close.** The build order and the tests that
+**Layer 0 is complete only when G0, G1, G2a and G5 all close.** The build order and the tests that
 unlock each gate are in [`../18-implementation-plan/`](../18-implementation-plan/) and
 [`../16-action-plan.md`](../16-action-plan.md). For where the project actually stands against
 them — audited, with the commands behind every claim — see
-[`../20-completion/`](../20-completion/). As of 2026-09-23: **G0 closed; G1 about half done (the
-agility registry is in, SLH-DSA and the KATs are not); G5 not started.**
+[`../20-completion/`](../20-completion/). As of 2026-09-30: **G0 closed; G1 about half done (the
+agility registry is in, SLH-DSA and the KATs are not); G2a and G5 not started.** G2a — canonical
+encoding for the two wire types — joined the definition via
+[ADR-0022](../adr/0022-g2-split-wire-and-consensus-encoding.md).
 
 ## What each automated check proves
 

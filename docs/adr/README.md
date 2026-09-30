@@ -26,6 +26,9 @@ future maintainers inherit the *reasoning*, not just the conclusion (Principle #
 | *0017* | *(reserved — reconcile the two intent models; blocks G10)* | — |
 | [0018](0018-signature-role-profiles.md) | Signature role profiles — the suite descriptor is `(role, version)` | Accepted |
 | [0019](0019-transport-authentication.md) | Transport authentication — native ML-DSA TLS certificates over QUIC | Accepted |
+| *0020* | *(reserved — block propagation: erasure-coded broadcast; at G6)* | — |
+| [0021](0021-peer-identity-across-libp2p.md) | Peer identity across the libp2p boundary — one identity, two encodings | Accepted |
+| [0022](0022-g2-split-wire-and-consensus-encoding.md) | Split G2 into wire (G2a) and consensus (G2b) encoding; Layer 0 = G0+G1+G2a+G5 | Accepted |
 
 ## Process
 

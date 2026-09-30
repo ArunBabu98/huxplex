@@ -70,7 +70,70 @@ cache) where canonicality is irrelevant — but never for anything hashed, signe
 - ➖ `serde` flexibility must be constrained (no untagged enums, no `#[serde(flatten)]`, explicit
   field order) — to be codified in the data-model spec and clippy/review rules.
 
+## Amendment — 2026-09-30: rule 5 superseded, rule 3 extended
+
+### Rule 5 was unsafe, and its migration trigger was wrong
+
+Rule 5 grandfathered `DhtEntry`'s hand-rolled `key || value` concatenation *"for the primitive
+networking types"*, to be migrated *"when those types gain fields."*
+
+On 2026-09-23 that construction was found to be **forgeable**. Concatenation encodes no field
+boundary, so `("abc","XY")` and `("ab","cXY")` produce identical signed bytes, and `verify()` —
+which rebuilds the payload from the record's own fields — **accepted the re-split**. Any observer
+of a signed record could republish the publisher's signature **under a different DHT key** while
+holding no key material. Since the DHT key decides routing, that is routing-table poisoning by a
+peer that possesses nothing. It falsified **G5-T5** and was exactly the ambiguity **G2-T2**
+forbids.
+
+Two things were wrong, and the second is the more important:
+
+1. **The grandfathering itself.** `key || value` was treated as a tolerable primitive encoding.
+   It was an *ambiguous* one, which is a different and much worse thing.
+2. **The migration trigger.** *"When those types gain fields"* implies the risk scales with field
+   count. It does not. **Two** variable-length fields are enough for ambiguity; the trigger should
+   have been the presence of a variable-length field at all.
+
+**Rule 5 is replaced by:**
+
+> **5′.** Ad-hoc concatenation of variable-length fields is **forbidden** in any signed or hashed
+> payload. Where a primitive encoding genuinely predates the `Codec` — as `DhtEntry`'s did — it
+> MUST frame every variable-length field with an explicit length. `DhtEntry` now signs
+> `u64_be(len(key)) ‖ key ‖ u64_be(len(value)) ‖ value`
+> ([wire spec §4](../15-specifications/05-network-wire-protocol.md),
+> [crypto spec §6.3](../15-specifications/02-cryptography-spec.md)). These encodings are
+> superseded by `Codec` at **G2a**, not "when fields are added".
+
+> **The general lesson, worth keeping:** ad-hoc concatenation is never a neutral shortcut. It is
+> an encoding decision, and an ambiguous one. The three existing tamper tests never caught this,
+> because each mutates one field and so *changes* the concatenation — tamper-resistance and
+> encoding-unambiguity are different properties, and only the second forbids two distinct values
+> sharing one signature.
+
+### Rule 3 predates the role axis
+
+Rule 3 requires every top-level signed object to be wrapped with *"the algorithm-suite/version
+byte(s) from ADR-0002."* [ADR-0018](0018-signature-role-profiles.md) has since made the descriptor
+**two-dimensional**: resolution is `(role, suite version)`, and the shipped `AlgoSuite` carries
+both.
+
+> **3′.** Every top-level signed object carries the full `AlgoSuite` descriptor — **both** `role`
+> and `suite_version` — not a version alone. Neither field is optional and neither is inferred
+> from the object's type at verification time (ADR-0018 rule V1).
+
+This is load-bearing for the G2a/G2b split in [ADR-0022](0022-g2-split-wire-and-consensus-encoding.md):
+G2a freezes the *wire* encoding, so `GossipMessage` and `DhtEntry` must carry the descriptor from
+their first canonical encoding, or the split recreates the state-migration trap ADR-0018 exists to
+avoid.
+
+### Scope unchanged
+
+The codec choice (postcard), the `Codec` trait, the canonical-decode rule and the float
+prohibition all stand. [ADR-0022](0022-g2-split-wire-and-consensus-encoding.md) splits *when*
+types are encoded, never *how* — there is **one** `Codec` across G2a and G2b. Two would be two
+dialects, which is the fork risk the gate exists to prevent.
+
 ## Links
 - [data model & encoding spec](../15-specifications/01-data-model-and-encoding.md)
 - [ADR-0002 crypto parameter set / suite versioning](0002-cryptographic-parameter-set.md)
-- Code: `crates/hux-network/src/message.rs` (`DhtEntry` manual concatenation — to migrate)
+- Amended by [ADR-0022](0022-g2-split-wire-and-consensus-encoding.md) (G2a/G2b split); rule 3 extended by [ADR-0018](0018-signature-role-profiles.md)
+- Code: `crates/hux-network/src/message.rs` — `DhtEntry` now length-framed; migrates to `Codec` at G2a

@@ -37,7 +37,7 @@
 | `PeerId` | `[u8; 32]` | raw 32 bytes; hex display 64 lowercase chars |
 | `GossipTopic` | newtype `String` | UTF-8 topic string (§ crypto spec §6.2) |
 | `GossipMessage` | `{ topic, network, payload, sig, from }` | see crypto spec §6.3 |
-| `DhtEntry` | `{ key, value, sig, signer_pk }` | signs `key‖value` (grandfathered) |
+| `DhtEntry` | `{ key, value, network, sig, signer_pk }` | signs the **length-framed** payload `u64_be(len(key)) ‖ key ‖ u64_be(len(value)) ‖ value`. The bare `key‖value` concatenation it replaced was **forgeable across the field boundary** — see [ADR-0011](../adr/0011-canonical-serialization.md) rule 5′ |
 
 ## 3. Consensus types (to be built, 🟡)
 

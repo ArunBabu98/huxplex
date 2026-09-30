@@ -11,28 +11,32 @@
 
 ## The answer
 
-**No. Layer 0 for v1 is not complete.** It is roughly **45%** complete: one of its three gates is
-closed, one is about half built, and one has not started.
+**No. Layer 0 for v1 is not complete.** It is roughly **35%** complete: of its **four** gates, one
+is closed, one is about half built, and two have not started.
 
 | Gate | Layer-0 scope | Status | Completion |
 |---|---|---|---|
 | **G0** · Repository health | workspace, portability, reproducibility, secret hygiene | 🟢 **CLOSED 2026-09-23** — all four exit criteria green in CI on three architectures | 100% |
 | **G1** · Crypto core + agility registry | `(role, version)` registry, SLH-DSA-128s, KATs, hybrid KEX | 🟦 **in progress** — C1–C5 done (the registry); C6–C11 open | ~45% |
-| **G5** · Transport | libp2p/QUIC, ML-DSA TLS certificates, live DHT, GossipSub | 🔴 **not started** — N0 spike ✅ closed; N1 blocked on an identity ADR | ~2% |
+| **G2a** · Wire encoding | canonical `Codec` + canonical decode for `GossipMessage`, `DhtEntry`, carrying the `(role, version)` descriptor | 🔴 **not started** — added to Layer 0 by [ADR-0022](../adr/0022-g2-split-wire-and-consensus-encoding.md) | 0% |
+| **G5** · Transport | libp2p/QUIC, ML-DSA TLS certificates, live DHT, GossipSub | 🔴 **not started** — N0 ✅ closed, identity settled by [ADR-0021](../adr/0021-peer-identity-across-libp2p.md); entry is now **G2a** | ~2% |
 
 > **What remains, in order:** G1's **C6** (sizes behind the descriptor) → **C9** (split
 > deterministic signing) → **C10** (the KATs — C9 blocks it, and it unblocks
 > [issue #12](https://github.com/ArunBabu98/huxplex/issues/12)) → **C7/C8** (SLH-DSA) → the
-> **hybrid KEX**. Then the two decisions G5 waits on, then G5 itself. Full detail with acceptance
+> **hybrid KEX** → **G1 closes** → **G2a** (two wire types) → **G5**. Full detail with acceptance
 > criteria: [`01-outstanding-work.md`](01-outstanding-work.md).
 
-> ⚠️ **Two decisions are yours, and both block work rather than being blocked by it.**
-> 1. **The G2 ordering gap** (§5.2 of the report) — Layer 0 is defined as G0+G1+G5, but G5's entry
->    condition is G2, which the same document marks *"NOT in this plan"*. Layer 0 as defined
->    cannot complete without a gate its definition omits.
-> 2. **The G5 identity ADR** (§5 of the report) — libp2p types the swarm on its own `PeerId`;
->    Huxplex's is `SHAKE-256(spki)[..32]`. Which one the swarm carries decides the shape of every
->    G5 task. This blocks N1.
+> ✅ **Both blocking decisions were taken on 2026-09-30.**
+> 1. **[ADR-0021](../adr/0021-peer-identity-across-libp2p.md)** — peer identity. **One identity,
+>    two encodings**: the libp2p `PeerId` is an identity-coded multihash wrapping Huxplex's, so
+>    there is no second identity and no binding to prove. ADR-0012 rule 5 is satisfied as written.
+>    N1 is unblocked.
+> 2. **[ADR-0022](../adr/0022-g2-split-wire-and-consensus-encoding.md)** — the ordering gap. G2
+>    splits along the wire/state line; **Layer 0 is now G0 + G1 + G2a + G5**, which is achievable
+>    as stated. G2b stays before G3.
+>
+> No decision currently blocks any Layer-0 work. Everything left is implementation.
 
 The definition being measured against is
 [`18-implementation-plan/04-sequencing-and-risks.md` § *What "Layer 0 complete" means*](../18-implementation-plan/04-sequencing-and-risks.md#what-layer-0-complete-means),
