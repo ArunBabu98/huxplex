@@ -27,8 +27,8 @@ libcrux-ml-kem = "0.0.10"
 # a direct dependency on a crate we were already compiling — and it retires RustCrypto `sha3`.
 libcrux-sha3 = "0.0.10"
 
-hkdf = "0.12.4"
-sha2 = "0.10.9"
+hkdf = "0.13.0"
+sha2 = "0.11.0"
 thiserror = "2.0.18"
 hex = "0.4.3"
 bip32 = "0.5.3"
