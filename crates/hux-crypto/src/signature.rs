@@ -12,6 +12,9 @@ pub struct Signature {
     pub bytes: Vec<u8>,
 }
 
+/// `Debug` is safe to derive: the private half's `Debug` is redacted (G0 item 7), and the
+/// redaction test in `tests/ml_dsa.rs` covers it.
+#[derive(Debug)]
 pub struct Keypair {
     publickey: PublicKey,
     privatekey: PrivateKey,

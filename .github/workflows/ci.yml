@@ -88,10 +88,16 @@ jobs:
         run: ./scripts/check-arch-negative.sh
 
   reproducible:
-    name: reproducible build (G0-T2)
+    name: reproducible build (G0-T2, G0-7)
     runs-on: ubuntu-latest
+    # G0-7 — the C toolchain is pinned too. Since G5, aws-lc-sys compiles AWS-LC from C, so the
+    # compiler, binutils and libc are build inputs like rustc. A digest, unlike a tag, cannot be
+    # re-pushed underneath us. Bump it deliberately, and re-run this job when you do.
+    container: rust:1.85.0-bookworm@sha256:0ff31c9ffa641a62e48d543fb00b4960955ea375f40776f40f585b89e654cc5e
     steps:
       - uses: actions/checkout@v7
+      - name: Trust the checkout (the container user does not own it; the script runs git archive)
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
       - run: rustup show
       - uses: Swatinem/rust-cache@v2
       - name: Two clean checkouts must produce byte-identical artifacts

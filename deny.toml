@@ -55,6 +55,14 @@ wildcards = "warn"
 # Deny crates known to be problematic; none yet.
 deny = []
 
+# ADR-0019 conditions 1–2 (G5 · N5): aws-lc-rs is admitted as the rustls crypto provider —
+# the only one with post-quantum key exchange and ML-DSA — in its non-FIPS build. The FIPS build
+# is a different C library with a different build (Go, CMake) and different reproducibility
+# properties; enabling it is a decision for an ADR, not a feature flag.
+[[bans.features]]
+crate = "aws-lc-rs"
+deny = ["fips"]
+
 [sources]
 # Only allow crates from crates.io by default.
 unknown-registry = "deny"

@@ -16,3 +16,14 @@ hux-types.workspace = true
 serde.workspace = true
 thiserror.workspace = true
 hex.workspace = true
+rand.workspace = true
+libp2p = { version = "0.56", default-features = false, features = ["gossipsub", "kad", "tokio", "macros"] }
+rustls = { version = "0.23.45", default-features = false, features = ["aws_lc_rs", "std"] }
+x509-cert = "0.2.5"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "time", "sync"] }
+futures = "0.3"
+quinn = { version = "0.11.12", default-features = false, features = ["runtime-tokio", "rustls-aws-lc-rs", "futures-io"] }
+
+[dev-dependencies]
+rustls = { version = "0.23.45", default-features = false, features = ["aws_lc_rs", "std"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "time", "sync", "test-util"] }
