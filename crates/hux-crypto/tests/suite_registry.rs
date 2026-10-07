@@ -306,6 +306,7 @@ fn c6_sizes_are_available_from_the_resolved_scheme() {
     assert_eq!(sizes.secret_key, 2560);
     assert_eq!(sizes.signature, 2420);
     assert_eq!(sizes.seed, 32);
+    assert_eq!(sizes.signing_randomness, 32);
 
     let keypair = Keypair::generate(scheme, [7u8; 32]).unwrap();
     assert_eq!(keypair.public_key().bytes.len(), sizes.public_key);

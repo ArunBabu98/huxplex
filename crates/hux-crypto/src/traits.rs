@@ -20,10 +20,14 @@
 //! BLAKE3 respectively.
 
 use crate::{
-    error::{CryptoError, CryptoResult},
-    sig::ml_dsa,
+    error::CryptoResult,
     suite::{SignatureSchemeId, SuiteError},
 };
+
+/// Each scheme's trait implementation lives beside its primitive, so registering a scheme is
+/// its own module, a registry row and a dispatch arm below — never a size edit anywhere else
+/// (G1 task C6). Re-exported so `hux_crypto::traits::MlDsa44` keeps working.
+pub use crate::sig::ml_dsa::MlDsa44;
 
 /// Byte lengths a scheme fixes. Sourced from the descriptor so no call site needs a literal
 /// (G1 task C6 — *"a second signature scheme can be registered without editing any size
@@ -34,6 +38,10 @@ pub struct SchemeSizes {
     pub secret_key: usize,
     pub signature: usize,
     pub seed: usize,
+    /// Per-signature randomness the scheme consumes (hedged signing). The signing path reads
+    /// this rather than naming a constant, so a scheme with a different nonce length — SLH-DSA's
+    /// `opt_rand` is `n` bytes, ML-DSA's `rnd` is 32 — needs no edit outside its own module.
+    pub signing_randomness: usize,
 }
 
 /// Verification, and the sizes needed to check inputs before attempting it.
@@ -74,58 +82,6 @@ pub trait Signer {
 pub trait SignatureScheme: Signer + Verifier {}
 
 impl<T: Signer + Verifier> SignatureScheme for T {}
-
-/// ML-DSA-44 (FIPS 204).
-pub struct MlDsa44;
-
-impl Verifier for MlDsa44 {
-    fn sizes(&self) -> SchemeSizes {
-        SchemeSizes {
-            public_key: ml_dsa::PK_LEN,
-            secret_key: ml_dsa::SK_LEN,
-            signature: ml_dsa::SIG_LEN,
-            seed: ml_dsa::SEED_LEN,
-        }
-    }
-
-    fn verify(
-        &self,
-        public_key: &[u8],
-        message: &[u8],
-        context: &[u8],
-        signature: &[u8],
-    ) -> CryptoResult<bool> {
-        ml_dsa::verify(public_key, message, context, signature)
-    }
-}
-
-impl Signer for MlDsa44 {
-    fn generate(&self, seed: &[u8]) -> CryptoResult<(Vec<u8>, Vec<u8>)> {
-        let seed: [u8; ml_dsa::SEED_LEN] =
-            seed.try_into().map_err(|_| CryptoError::InvalidKeyLength {
-                expected: ml_dsa::SEED_LEN,
-                actual: seed.len(),
-            })?;
-        Ok(ml_dsa::generate(seed))
-    }
-
-    fn sign(
-        &self,
-        secret_key: &[u8],
-        message: &[u8],
-        context: &[u8],
-        randomness: &[u8],
-    ) -> CryptoResult<Vec<u8>> {
-        let randomness: [u8; ml_dsa::SIGNING_RANDOMNESS_LEN] =
-            randomness
-                .try_into()
-                .map_err(|_| CryptoError::InvalidKeyLength {
-                    expected: ml_dsa::SIGNING_RANDOMNESS_LEN,
-                    actual: randomness.len(),
-                })?;
-        ml_dsa::sign(secret_key, message, context, randomness)
-    }
-}
 
 /// Resolves an identifier to its implementation.
 ///
