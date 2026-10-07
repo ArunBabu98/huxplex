@@ -9,6 +9,7 @@
 //! backend note in [`kem`].
 
 pub mod bip32;
+pub mod context;
 pub mod error;
 pub mod privatekey;
 pub mod publickey;

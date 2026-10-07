@@ -14,20 +14,19 @@ fn test_all_canonical_context_strings_self_verify() {
     let kp = Keypair::generate(SignatureSchemeId::Dilithium2, [42u8; 32]).unwrap();
     let payload = b"canonical-context-test-payload";
 
-    // All context strings defined across the Huxplex spec
+    // Live context strings from the spec (the full registry sweep is tests/context_registry.rs;
+    // the retired tls:handshake context is deliberately absent).
     let contexts: &[&[u8]] = &[
         b"huxplex-mainnet:tx:v1",
         b"huxplex-mainnet:block:preprepare:v1",
         b"huxplex-mainnet:block:prepare:v1",
         b"huxplex-mainnet:block:commit:v1",
-        b"huxplex-mainnet:tls:handshake:v1",
         b"huxplex-mainnet:gossip:huxplex/intents:v1",
         b"huxplex-mainnet:vc:v1",
         b"huxplex-mainnet:provenance:v1",
         b"huxplex-mainnet:dht:entry:v1",
         b"huxplex-mainnet:intent:v1",
         b"huxplex-testnet:tx:v1",
-        b"huxplex-testnet:tls:handshake:v1",
     ];
 
     for ctx in contexts {
@@ -53,7 +52,6 @@ fn test_all_canonical_context_strings_are_mutually_domain_separated() {
     let contexts: &[&[u8]] = &[
         b"huxplex-mainnet:tx:v1",
         b"huxplex-mainnet:block:preprepare:v1",
-        b"huxplex-mainnet:tls:handshake:v1",
         b"huxplex-mainnet:vc:v1",
         b"huxplex-mainnet:provenance:v1",
         b"huxplex-mainnet:dht:entry:v1",

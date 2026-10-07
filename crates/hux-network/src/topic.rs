@@ -1,3 +1,5 @@
+use hux_crypto::context::{self, Purpose};
+
 /// All canonical GossipSub topics per spec.
 /// Block/Tx Propagation: huxplex/shard/{shard_id}/blocks
 ///                       huxplex/shard/{shard_id}/mempool
@@ -25,8 +27,10 @@ impl GossipTopic {
 
 /// Derives the ML-DSA-44 context string for a gossip message on this topic.
 /// Format: b"huxplex-{network}:gossip:{topic}:v1"
+///
+/// Built by `hux_crypto::context`, the spec §5 registry, so the string has one definition.
 pub fn gossip_context(network: &str, topic: &GossipTopic) -> Vec<u8> {
-    format!("huxplex-{network}:gossip:{}:v1", topic.as_str()).into_bytes()
+    context::gossip_context(network, topic.as_str())
 }
 
 /// Derives the ML-DSA-44 context string for an authenticated Kademlia DHT entry.
@@ -35,5 +39,5 @@ pub fn gossip_context(network: &str, topic: &GossipTopic) -> Vec<u8> {
 /// Network-generalized per the cryptography spec §5 rule 2 — a `mainnet` DHT record must not
 /// verify under `testnet` and vice versa.
 pub fn dht_entry_context(network: &str) -> Vec<u8> {
-    format!("huxplex-{network}:dht:entry:v1").into_bytes()
+    context::context_for(network, Purpose::DhtEntry)
 }
