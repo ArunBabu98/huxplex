@@ -30,7 +30,7 @@ use crate::{
 /// Each scheme's trait implementation lives beside its primitive, so registering a scheme is
 /// its own module, a registry row and a dispatch arm below — never a size edit anywhere else
 /// (G1 task C6). Re-exported so `hux_crypto::traits::MlDsa44` keeps working.
-pub use crate::sig::ml_dsa::MlDsa44;
+pub use crate::sig::{ml_dsa::MlDsa44, slh_dsa::SlhDsaShake128s};
 
 /// Byte lengths a scheme fixes. Sourced from the descriptor so no call site needs a literal
 /// (G1 task C6 — *"a second signature scheme can be registered without editing any size
@@ -131,17 +131,16 @@ impl<T: Signer + Verifier> SignatureScheme for T {}
 
 /// Resolves an identifier to its implementation.
 ///
-/// Returns [`SuiteError::SchemeUnimplemented`] for a scheme that is registered but not built yet
-/// — suite v1 resolves `Identity` and `Governance` to SLH-DSA-128s, which arrives at G1 task C7.
-/// That is a *distinct* error from an unknown identifier, and neither ever falls back to a
-/// working scheme: silently substituting a hot-path primitive for a root-of-trust one is the
-/// downgrade this registry exists to prevent.
+/// Every scheme suite v1 names is implemented. A scheme registered ahead of its implementation
+/// would resolve to [`SuiteError::SchemeUnimplemented`] — a *distinct* error from an unknown
+/// identifier, and never a fallback to a working scheme: silently substituting a hot-path
+/// primitive for a root-of-trust one is the downgrade this registry exists to prevent.
 pub fn implementation(
     scheme: SignatureSchemeId,
 ) -> Result<&'static dyn SignatureScheme, SuiteError> {
     match scheme {
         SignatureSchemeId::Dilithium2 => Ok(&MlDsa44),
-        SignatureSchemeId::SlhDsa128s => Err(SuiteError::SchemeUnimplemented { scheme }),
+        SignatureSchemeId::SlhDsa128s => Ok(&SlhDsaShake128s),
     }
 }
 
@@ -152,6 +151,6 @@ pub fn implementation(
 pub fn verifier(scheme: SignatureSchemeId) -> Result<&'static dyn Verifier, SuiteError> {
     match scheme {
         SignatureSchemeId::Dilithium2 => Ok(&MlDsa44),
-        SignatureSchemeId::SlhDsa128s => Err(SuiteError::SchemeUnimplemented { scheme }),
+        SignatureSchemeId::SlhDsa128s => Ok(&SlhDsaShake128s),
     }
 }

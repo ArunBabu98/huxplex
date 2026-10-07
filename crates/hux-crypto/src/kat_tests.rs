@@ -25,3 +25,19 @@ fn kat_ml_dsa_44_signatures_are_byte_exact() {
         assert_eq!(hex::encode(&sig.bytes), hex::encode(v.get("signature")));
     }
 }
+
+#[test]
+fn kat_slh_dsa_shake_128s_signatures_are_byte_exact() {
+    let vectors = kat::parse(include_str!("../tests/kat/slh_dsa_shake_128s.kat"));
+    for v in kat::of_kind(&vectors, "sign") {
+        let kp = Keypair::generate_from_seed(SignatureSchemeId::SlhDsa128s, v.get("seed")).unwrap();
+        let sig = kp
+            .sign_with_randomness(
+                v.get("message"),
+                Some(v.get("context")),
+                v.get("randomness"),
+            )
+            .unwrap();
+        assert_eq!(hex::encode(&sig.bytes), hex::encode(v.get("signature")));
+    }
+}

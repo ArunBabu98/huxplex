@@ -43,3 +43,16 @@ subtle = "2.6"
 
 # Internal
 hux-crypto = { path = "crates/hux-crypto" }
+
+# SLH-DSA-128s signing is a few hundred hash-tree evaluations per signature; unoptimised it turns
+# the conformance suite from seconds into minutes. Optimising only the hash-based signature crates
+# and their Keccak in dev/test keeps `cargo test` usable. Release builds — and therefore the G0-T2
+# reproducibility comparison — are unaffected.
+[profile.dev.package.fips205]
+opt-level = 3
+[profile.dev.package.slh-dsa]
+opt-level = 3
+[profile.dev.package.sha3]
+opt-level = 3
+[profile.dev.package.keccak]
+opt-level = 3

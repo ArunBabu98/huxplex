@@ -96,7 +96,10 @@ impl Keypair {
 }
 
 /// Keygen against any registered scheme, with the seed length taken from the scheme itself.
-fn keygen(implementation: &dyn SignatureScheme, seed: &[u8]) -> CryptoResult<(Vec<u8>, Vec<u8>)> {
+pub(crate) fn keygen(
+    implementation: &dyn SignatureScheme,
+    seed: &[u8],
+) -> CryptoResult<(Vec<u8>, Vec<u8>)> {
     let expected = implementation.sizes().seed;
     if seed.len() != expected {
         return Err(CryptoError::InvalidKeyLength {
@@ -113,7 +116,7 @@ fn keygen(implementation: &dyn SignatureScheme, seed: &[u8]) -> CryptoResult<(Ve
 /// fault injection is a demonstrated key-recovery path (eprint 2025/2009), so hedging is
 /// mandatory, not optional. Its *length* comes from the scheme's descriptor, so no nonce size is
 /// named here (G1 task C6).
-fn sign_hedged(
+pub(crate) fn sign_hedged(
     implementation: &dyn SignatureScheme,
     secret_key: &[u8],
     message: &[u8],

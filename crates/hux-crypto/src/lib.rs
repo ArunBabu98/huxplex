@@ -18,7 +18,7 @@ pub mod suite;
 pub mod traits;
 
 /// Raw primitives. These modules are the **only** places permitted to name a vendor crate
-/// (`libcrux_ml_dsa`, `libcrux_ml_kem`); everything above reaches them through the suite
+/// (`libcrux_ml_dsa`, `libcrux_ml_kem`, `libcrux_sha3`, `fips205`); everything above reaches them through the suite
 /// registry and the primitive traits (G1 task C4, enforced by
 /// `scripts/check-primitive-encapsulation.sh`).
 pub mod kem {
@@ -29,6 +29,7 @@ pub mod kem {
 }
 pub mod sig {
     pub mod ml_dsa;
+    pub mod slh_dsa;
 }
 pub mod hash;
 
@@ -41,7 +42,6 @@ mod kat_tests;
 // API. Their tests are `#[ignore]`d and carry a `// GATE: Gn` marker naming the gate that
 // un-ignores them (docs/16-action-plan.md, rule G0-T3).
 //
-//   slh_dsa  — GATE: G1   (FIPS 205, validator long-lived identity)
 //   lb_vrf   — GATE: G6+  (leader election; deferred out of v1)
 //   pq_ssle  — GATE: G6+  (single secret leader election; deferred out of v1)
 //   zk_stark — GATE: G10  (agent proof-of-task-completion; deferred out of v1)
@@ -50,6 +50,10 @@ pub mod lb_vrf;
 #[cfg(test)]
 pub mod pq_ssle;
 #[cfg(test)]
-pub mod slh_dsa;
-#[cfg(test)]
 pub mod zk_stark;
+
+// SLH-DSA-128s's conformance suite, written against a contract before the primitive existed and
+// un-ignored by G1 task C7. Test-only because it drives the crate-internal hedged signing path;
+// the primitive itself is `sig::slh_dsa`.
+#[cfg(test)]
+mod slh_dsa;

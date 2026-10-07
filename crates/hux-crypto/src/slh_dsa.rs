@@ -1,85 +1,63 @@
-//! SLH-DSA-128s (FIPS 205) — API contract only. **Not implemented.**
+//! SLH-DSA-128s conformance suite (FIPS 205) — **G1 task C7**.
 //!
-//! Hash-based stateless signatures, used for validator long-lived identity and
-//! root-of-trust, per ADR-0002's hybrid key model (ML-DSA-44 hot signing,
-//! SLH-DSA long-lived identity).
+//! These tests were written against a fixed API contract before there was an implementation, and
+//! sat `#[ignore]`d under `GATE: G1`. The functions below are that contract, now implemented by
+//! routing through the suite registry exactly as production code does: keygen via the resolved
+//! scheme's `Signer`, signing via the **hedged production path** (system CSPRNG `opt_rand`), and
+//! verification via its `Verifier`. Nothing here names `fips205` — the primitive lives in
+//! [`crate::sig::slh_dsa`], and that is the point being tested.
 //!
-//! This module exists so the conformance suite in `mod.rs` (`slh_dsa_128s_tests`)
-//! type-checks against a fixed contract before there is an implementation. It is
-//! `#[cfg(test)]`-only: no `unimplemented!()` cryptography is exposed in the
-//! library's public API.
-//!
-//! Gate: **G1** (docs/16-action-plan.md). Implementing this module means making
-//! `slh_dsa_128s_tests` pass and removing the `#[ignore]` markers.
+//! The suite is `#[cfg(test)]` so it can reach the crate-internal signing path; the public route
+//! is `Keypair::generate_from_seed(SignatureSchemeId::SlhDsa128s, ..)` and `Keypair::sign`.
 
-/// FIPS 205 Table 1, SLH-DSA-128s: `PKBytes = 2n = 32`.
+use crate::{
+    signature::{keygen, sign_hedged},
+    signaturescheme::SignatureSchemeId,
+    traits::{self, SignatureScheme},
+};
+
+/// FIPS 205 Table 2, SLH-DSA-128s: `PKBytes = 2n = 32`.
 pub const SLH_DSA_PK_SIZE: usize = 32;
-/// FIPS 205 Table 1, SLH-DSA-128s: `SKBytes = 4n = 64`.
+/// FIPS 205 Table 2, SLH-DSA-128s: `SKBytes = 4n = 64`.
 pub const SLH_DSA_SK_SIZE: usize = 64;
-/// FIPS 205 Table 1, SLH-DSA-128s: `SigBytes = 7856`.
+/// FIPS 205 Table 2, SLH-DSA-128s: `SigBytes = 7856`.
 pub const SLH_DSA_SIG_SIZE: usize = 7856;
 
-const UNIMPLEMENTED: &str =
-    "SLH-DSA-128s is not implemented (gate G1). See docs/16-action-plan.md.";
+fn scheme() -> &'static dyn SignatureScheme {
+    traits::implementation(SignatureSchemeId::SlhDsa128s).expect("SLH-DSA-128s is implemented")
+}
 
 /// Derive a keypair from a FIPS 205 keygen seed
 /// (`SK.seed(n) || SK.prf(n) || PK.seed(n)` = 3n = 48 bytes for n=16).
-pub fn slh_dsa_128s_keygen(_seed: [u8; 48]) -> ([u8; SLH_DSA_PK_SIZE], [u8; SLH_DSA_SK_SIZE]) {
-    unimplemented!("{UNIMPLEMENTED}")
+pub fn slh_dsa_128s_keygen(seed: [u8; 48]) -> ([u8; SLH_DSA_PK_SIZE], [u8; SLH_DSA_SK_SIZE]) {
+    let (pk, sk) = keygen(scheme(), &seed).expect("48-byte seed is the scheme's seed length");
+    (pk.try_into().unwrap(), sk.try_into().unwrap())
 }
 
-/// Sign `msg` under optional domain-separation context `ctx`.
+/// Sign `msg` under optional domain-separation context `ctx`, hedged.
 pub fn slh_dsa_128s_sign(
-    _sk: &[u8; SLH_DSA_SK_SIZE],
-    _msg: &[u8],
-    _ctx: Option<&[u8]>,
+    sk: &[u8; SLH_DSA_SK_SIZE],
+    msg: &[u8],
+    ctx: Option<&[u8]>,
 ) -> [u8; SLH_DSA_SIG_SIZE] {
-    unimplemented!("{UNIMPLEMENTED}")
+    sign_hedged(scheme(), sk, msg, ctx.unwrap_or(&[]))
+        .expect("signing with a well-formed key")
+        .try_into()
+        .unwrap()
 }
 
 /// Verify `sig` over `msg` under the same context used to sign.
 pub fn slh_dsa_128s_verify(
-    _pk: &[u8; SLH_DSA_PK_SIZE],
-    _msg: &[u8],
-    _sig: &[u8; SLH_DSA_SIG_SIZE],
-    _ctx: Option<&[u8]>,
+    pk: &[u8; SLH_DSA_PK_SIZE],
+    msg: &[u8],
+    sig: &[u8; SLH_DSA_SIG_SIZE],
+    ctx: Option<&[u8]>,
 ) -> bool {
-    unimplemented!("{UNIMPLEMENTED}")
+    scheme()
+        .verify(pk, msg, ctx.unwrap_or(&[]), sig)
+        .expect("inputs are fixed-size arrays of the scheme's lengths")
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Add to crates/hux-crypto/src/lib.rs:
-//   pub mod slh_dsa;
-//   pub mod lb_vrf;
-//   pub mod pq_ssle;
-//   pub mod zk_stark;
-// ─────────────────────────────────────────────────────────────────────────────
-
-// ═════════════════════════════════════════════════════════════════════════════
-//  SLH-DSA-128s  (FIPS 205)
-//  Hash-based stateless signature — validator long-lived identity / registration
-//
-//  Expected API (crates/hux-crypto/src/slh_dsa.rs):
-//    pub const SLH_DSA_PK_SIZE:  usize = 32;
-//    pub const SLH_DSA_SK_SIZE:  usize = 64;
-//    pub const SLH_DSA_SIG_SIZE: usize = 7856;
-//
-//    pub fn slh_dsa_128s_keygen(seed: [u8; 48])
-//        -> ([u8; SLH_DSA_PK_SIZE], [u8; SLH_DSA_SK_SIZE]);
-//
-//    pub fn slh_dsa_128s_sign(
-//        sk:  &[u8; SLH_DSA_SK_SIZE],
-//        msg: &[u8],
-//        ctx: Option<&[u8]>,
-//    ) -> [u8; SLH_DSA_SIG_SIZE];
-//
-//    pub fn slh_dsa_128s_verify(
-//        pk:  &[u8; SLH_DSA_PK_SIZE],
-//        msg: &[u8],
-//        sig: &[u8; SLH_DSA_SIG_SIZE],
-//        ctx: Option<&[u8]>,
-//    ) -> bool;
-// ═════════════════════════════════════════════════════════════════════════════
 #[cfg(test)]
 mod slh_dsa_128s_tests {
     use crate::slh_dsa::{
@@ -102,7 +80,6 @@ mod slh_dsa_128s_tests {
     // ══════════════════════════════════════════════════════════════════════════
 
     #[test]
-    #[ignore = "GATE: G1 — not implemented; see docs/16-action-plan.md"]
     fn test_pk_size_matches_fips205_slh_dsa_128s() {
         // FIPS 205 Table 1 — SLH-DSA-128s: PKBytes = 2n = 2×16 = 32
         assert_eq!(
@@ -114,7 +91,6 @@ mod slh_dsa_128s_tests {
     }
 
     #[test]
-    #[ignore = "GATE: G1 — not implemented; see docs/16-action-plan.md"]
     fn test_sk_size_matches_fips205_slh_dsa_128s() {
         // FIPS 205 Table 1 — SLH-DSA-128s: SKBytes = 4n = 4×16 = 64
         assert_eq!(
@@ -126,7 +102,6 @@ mod slh_dsa_128s_tests {
     }
 
     #[test]
-    #[ignore = "GATE: G1 — not implemented; see docs/16-action-plan.md"]
     fn test_sig_size_matches_fips205_slh_dsa_128s() {
         // FIPS 205 Table 1 — SLH-DSA-128s (n=16, h=63, d=7, k=14, a=12, w=16):
         // SigBytes = n + k(a+1)n + d·len·n + h·n = 16 + 14·13·16 + 7·35·16 + 63·16
@@ -141,7 +116,6 @@ mod slh_dsa_128s_tests {
     }
 
     #[test]
-    #[ignore = "GATE: G1 — not implemented; see docs/16-action-plan.md"]
     fn test_sig_size_is_constant_regardless_of_message_size() {
         // SLH-DSA signature size is fixed — it does NOT grow with message size.
         // This is a key advantage over hash-then-sign schemes.
@@ -183,7 +157,6 @@ mod slh_dsa_128s_tests {
     // ══════════════════════════════════════════════════════════════════════════
 
     #[test]
-    #[ignore = "GATE: G1 — not implemented; see docs/16-action-plan.md"]
     fn test_sign_and_verify_roundtrip() {
         let (pk, sk) = make_keypair(SEED_A);
         let msg = b"validator-registration:did:huxplex:0xdeadbeef";
@@ -197,7 +170,6 @@ mod slh_dsa_128s_tests {
     }
 
     #[test]
-    #[ignore = "GATE: G1 — not implemented; see docs/16-action-plan.md"]
     fn test_sign_and_verify_without_context() {
         let (pk, sk) = make_keypair(SEED_A);
         let msg = b"test message";
@@ -210,7 +182,6 @@ mod slh_dsa_128s_tests {
     }
 
     #[test]
-    #[ignore = "GATE: G1 — not implemented; see docs/16-action-plan.md"]
     fn test_empty_message_sign_and_verify() {
         let (pk, sk) = make_keypair(SEED_A);
         let sig = slh_dsa_128s_sign(&sk, b"", None);
@@ -225,7 +196,6 @@ mod slh_dsa_128s_tests {
     // ══════════════════════════════════════════════════════════════════════════
 
     #[test]
-    #[ignore = "GATE: G1 — not implemented; see docs/16-action-plan.md"]
     fn test_tampered_message_fails_verification() {
         let (pk, sk) = make_keypair(SEED_A);
         let original = b"Register validator: did:huxplex:0xAABBCCDD";
@@ -240,7 +210,6 @@ mod slh_dsa_128s_tests {
     }
 
     #[test]
-    #[ignore = "GATE: G1 — not implemented; see docs/16-action-plan.md"]
     fn test_first_byte_flip_in_signature_fails_verification() {
         let (pk, sk) = make_keypair(SEED_A);
         let msg = b"validator-registration";
@@ -254,7 +223,6 @@ mod slh_dsa_128s_tests {
     }
 
     #[test]
-    #[ignore = "GATE: G1 — not implemented; see docs/16-action-plan.md"]
     fn test_last_byte_flip_in_signature_fails_verification() {
         let (pk, sk) = make_keypair(SEED_A);
         let msg = b"validator-registration";
@@ -268,7 +236,6 @@ mod slh_dsa_128s_tests {
     }
 
     #[test]
-    #[ignore = "GATE: G1 — not implemented; see docs/16-action-plan.md"]
     fn test_middle_byte_flip_in_signature_fails_verification() {
         let (pk, sk) = make_keypair(SEED_A);
         let msg = b"validator-registration";
@@ -282,7 +249,6 @@ mod slh_dsa_128s_tests {
     }
 
     #[test]
-    #[ignore = "GATE: G1 — not implemented; see docs/16-action-plan.md"]
     fn test_all_zero_signature_fails_verification() {
         let (pk, _sk) = make_keypair(SEED_A);
         let msg = b"validator-registration";
@@ -295,7 +261,6 @@ mod slh_dsa_128s_tests {
     }
 
     #[test]
-    #[ignore = "GATE: G1 — not implemented; see docs/16-action-plan.md"]
     fn test_wrong_public_key_fails_verification() {
         let (pk_a, sk_a) = make_keypair(SEED_A);
         let (pk_b, _sk_b) = make_keypair(SEED_B);
@@ -318,7 +283,6 @@ mod slh_dsa_128s_tests {
     // ══════════════════════════════════════════════════════════════════════════
 
     #[test]
-    #[ignore = "GATE: G1 — not implemented; see docs/16-action-plan.md"]
     fn test_wrong_context_fails_verification() {
         let (pk, sk) = make_keypair(SEED_A);
         let msg = b"validator-registration";
@@ -342,7 +306,6 @@ mod slh_dsa_128s_tests {
     }
 
     #[test]
-    #[ignore = "GATE: G1 — not implemented; see docs/16-action-plan.md"]
     fn test_no_context_sig_fails_when_context_required_at_verify() {
         let (pk, sk) = make_keypair(SEED_A);
         let msg = b"validator-registration";
@@ -360,7 +323,6 @@ mod slh_dsa_128s_tests {
     }
 
     #[test]
-    #[ignore = "GATE: G1 — not implemented; see docs/16-action-plan.md"]
     fn test_mainnet_and_testnet_registration_contexts_are_domain_separated() {
         let (pk, sk) = make_keypair(SEED_A);
         let msg = b"validator-registration";
@@ -381,7 +343,6 @@ mod slh_dsa_128s_tests {
     // ══════════════════════════════════════════════════════════════════════════
 
     #[test]
-    #[ignore = "GATE: G1 — not implemented; see docs/16-action-plan.md"]
     fn test_keygen_is_deterministic_same_seed_same_keys() {
         let (pk1, sk1) = make_keypair(SEED_A);
         let (pk2, sk2) = make_keypair(SEED_A);
@@ -391,7 +352,6 @@ mod slh_dsa_128s_tests {
     }
 
     #[test]
-    #[ignore = "GATE: G1 — not implemented; see docs/16-action-plan.md"]
     fn test_different_seeds_produce_different_keys() {
         let (pk_a, sk_a) = make_keypair(SEED_A);
         let (pk_b, sk_b) = make_keypair(SEED_B);
@@ -405,7 +365,6 @@ mod slh_dsa_128s_tests {
     }
 
     #[test]
-    #[ignore = "GATE: G1 — not implemented; see docs/16-action-plan.md"]
     fn test_keys_are_non_trivial() {
         let (pk, sk) = make_keypair(SEED_A);
         assert_ne!(pk, [0u8; SLH_DSA_PK_SIZE], "PK must not be all-zero");
@@ -415,7 +374,6 @@ mod slh_dsa_128s_tests {
     }
 
     #[test]
-    #[ignore = "GATE: G1 — not implemented; see docs/16-action-plan.md"]
     fn test_sig_is_non_trivial() {
         let (_pk, sk) = make_keypair(SEED_A);
         let sig = slh_dsa_128s_sign(&sk, b"test", None);
@@ -466,7 +424,6 @@ mod slh_dsa_128s_tests {
     }
 
     #[test]
-    #[ignore = "GATE: G1 — not implemented; see docs/16-action-plan.md"]
     fn test_five_validator_registration_signatures_all_verify() {
         // Simulates 5 validators registering — each signs their DID with the
         // SLH-DSA-128s long-lived identity key using the registration context.
@@ -493,7 +450,6 @@ mod slh_dsa_128s_tests {
     }
 
     #[test]
-    #[ignore = "GATE: G1 — not implemented; see docs/16-action-plan.md"]
     fn test_zero_and_max_seed_no_panic_and_correctness() {
         for seed in [[0x00u8; 48], [0xFFu8; 48]] {
             let (pk, sk) = make_keypair(seed);

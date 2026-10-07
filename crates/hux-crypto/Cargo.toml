@@ -22,6 +22,11 @@ bip32.workspace = true
 rand.workspace = true
 zeroize.workspace = true
 subtle.workspace = true
+# SLH-DSA-SHAKE-128s (G1 · C7). Pure Rust, `deny(unsafe_code)`; only the one parameter set the
+# registry names is compiled. Its RNG interface is rand_core 0.6, hence the renamed import —
+# used only by `sig/slh_dsa.rs` to hand it the sealed `opt_rand`.
+fips205 = { version = "0.4.1", default-features = false, features = ["slh_dsa_shake_128s"] }
+rand_core_06 = { package = "rand_core", version = "0.6.4", default-features = false }
 
 # SIMD backends are selected per target architecture. The crypto code always calls libcrux's
 # top-level (multiplexing) entry points, which pick a backend at runtime and fall back to the
@@ -40,3 +45,5 @@ libcrux-ml-kem = { workspace = true, features = ["simd128"] }
 [dev-dependencies]
 ml-dsa = "0.1.1"
 ml-kem = "0.3.2"
+# Differential oracle for SLH-DSA (G1 · C8).
+slh-dsa = "0.2.0-rc.5"
