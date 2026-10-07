@@ -1,12 +1,9 @@
-use rand::Rng;
-use zeroize::Zeroizing;
-
 use crate::{
     error::{CryptoError, CryptoResult},
     privatekey::PrivateKey,
     publickey::PublicKey,
     signaturescheme::SignatureSchemeId,
-    traits::{self, SignatureScheme},
+    traits::{self, SignatureScheme, SigningRandomness},
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -52,6 +49,17 @@ impl Keypair {
         &self.privatekey
     }
 
+    /// Signs `message` under `context` — **the production entry point**.
+    ///
+    /// Per-signature randomness comes from the system CSPRNG and cannot be supplied by the
+    /// caller (G1 task C9, crypto spec §3). The deterministic entry point the KATs need exists
+    /// only in test builds of this crate, and is not part of the public API:
+    ///
+    /// ```compile_fail
+    /// # use hux_crypto::{signature::Keypair, signaturescheme::SignatureSchemeId};
+    /// let kp = Keypair::generate(SignatureSchemeId::Dilithium2, [0u8; 32]).unwrap();
+    /// let _ = kp.sign_with_randomness(b"m", None, &[0u8; 32]);
+    /// ```
     pub fn sign(&self, message: &[u8], context: Option<&[u8]>) -> CryptoResult<Signature> {
         let scheme = self.public_key().scheme;
         let bytes = sign_hedged(
@@ -59,6 +67,28 @@ impl Keypair {
             self.private_key().expose_secret(),
             message,
             context.unwrap_or(&[]),
+        )?;
+
+        Ok(Signature { scheme, bytes })
+    }
+
+    /// Signs with caller-chosen randomness. **Test-only**: compiled out of every non-test build,
+    /// so the byte-exact signature KATs (G1 task C10) can pin the nonce while production signing
+    /// cannot be made deterministic by any caller. A separate function, never a flag on
+    /// [`Self::sign`].
+    #[cfg(test)]
+    pub(crate) fn sign_with_randomness(
+        &self,
+        message: &[u8],
+        context: Option<&[u8]>,
+        randomness: &[u8],
+    ) -> CryptoResult<Signature> {
+        let scheme = self.public_key().scheme;
+        let bytes = traits::implementation(scheme)?.sign(
+            self.private_key().expose_secret(),
+            message,
+            context.unwrap_or(&[]),
+            &SigningRandomness::explicit(randomness),
         )?;
 
         Ok(Signature { scheme, bytes })
@@ -89,8 +119,7 @@ fn sign_hedged(
     message: &[u8],
     context: &[u8],
 ) -> CryptoResult<Vec<u8>> {
-    let mut randomness = Zeroizing::new(vec![0u8; implementation.sizes().signing_randomness]);
-    rand::rng().fill_bytes(&mut randomness);
+    let randomness = SigningRandomness::from_system_rng(implementation.sizes().signing_randomness);
     implementation.sign(secret_key, message, context, &randomness)
 }
 
@@ -102,7 +131,7 @@ mod c6_tests {
     //! the dummy's own length checks would reject what it was handed.
 
     use super::*;
-    use crate::traits::{SchemeSizes, Signer, Verifier};
+    use crate::traits::{SchemeSizes, Signer, SigningRandomness, Verifier};
 
     const DUMMY: SchemeSizes = SchemeSizes {
         public_key: 7,
@@ -134,7 +163,14 @@ mod c6_tests {
             Ok((vec![1; DUMMY.public_key], vec![2; DUMMY.secret_key]))
         }
 
-        fn sign(&self, sk: &[u8], _: &[u8], _: &[u8], randomness: &[u8]) -> CryptoResult<Vec<u8>> {
+        fn sign(
+            &self,
+            sk: &[u8],
+            _: &[u8],
+            _: &[u8],
+            randomness: &SigningRandomness,
+        ) -> CryptoResult<Vec<u8>> {
+            let randomness = randomness.as_bytes();
             assert_eq!(sk.len(), DUMMY.secret_key);
             assert_eq!(
                 randomness.len(),
@@ -165,5 +201,66 @@ mod c6_tests {
             }
             other => panic!("expected InvalidKeyLength, got {other:?}"),
         }
+    }
+}
+
+#[cfg(test)]
+mod c9_tests {
+    //! G1 task C9: production signing is hedged and takes no caller randomness; a separate,
+    //! test-only entry point takes explicit randomness so signature KATs can be byte-exact.
+
+    use super::*;
+
+    fn keypair() -> Keypair {
+        Keypair::generate(SignatureSchemeId::Dilithium2, [99u8; 32]).unwrap()
+    }
+
+    #[test]
+    fn c9_production_signing_is_hedged() {
+        // Two production signatures over the same input must differ: the nonce is fresh each
+        // time. Equal outputs would mean the CSPRNG path is not reaching the scheme.
+        let kp = keypair();
+        let a = kp.sign(b"m", Some(b"huxplex-testnet:tx:v1")).unwrap();
+        let b = kp.sign(b"m", Some(b"huxplex-testnet:tx:v1")).unwrap();
+        assert_ne!(
+            a.bytes, b.bytes,
+            "production signing must not be deterministic"
+        );
+        assert!(
+            kp.public_key()
+                .verify(b"m", &a, Some(b"huxplex-testnet:tx:v1"))
+                .unwrap()
+        );
+        assert!(
+            kp.public_key()
+                .verify(b"m", &b, Some(b"huxplex-testnet:tx:v1"))
+                .unwrap()
+        );
+    }
+
+    #[test]
+    fn c9_test_entry_point_is_deterministic_in_its_randomness() {
+        let kp = keypair();
+        let a = kp.sign_with_randomness(b"m", None, &[7u8; 32]).unwrap();
+        let b = kp.sign_with_randomness(b"m", None, &[7u8; 32]).unwrap();
+        let c = kp.sign_with_randomness(b"m", None, &[8u8; 32]).unwrap();
+        assert_eq!(
+            a.bytes, b.bytes,
+            "same randomness must give the same signature"
+        );
+        assert_ne!(
+            a.bytes, c.bytes,
+            "the randomness must actually reach the scheme"
+        );
+        assert!(kp.public_key().verify(b"m", &a, None).unwrap());
+    }
+
+    #[test]
+    fn c9_test_entry_point_rejects_randomness_of_the_wrong_length() {
+        assert!(
+            keypair()
+                .sign_with_randomness(b"m", None, &[0u8; 31])
+                .is_err()
+        );
     }
 }

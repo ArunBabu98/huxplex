@@ -19,6 +19,9 @@
 //! vendor crates, which is the property C4 actually asks for. They land with the hybrid KEX and
 //! BLAKE3 respectively.
 
+use rand::Rng;
+use zeroize::Zeroizing;
+
 use crate::{
     error::CryptoResult,
     suite::{SignatureSchemeId, SuiteError},
@@ -44,6 +47,46 @@ pub struct SchemeSizes {
     pub signing_randomness: usize,
 }
 
+/// Per-signature randomness for hedged signing.
+///
+/// **Constructible only inside `hux-crypto`.** Production code obtains it from the system CSPRNG
+/// via the signing path; the explicit-bytes constructor exists only under `cfg(test)`, for the
+/// byte-exact signature KATs. Two constructors, not one with a flag — a `deterministic: bool` is
+/// a downgrade switch waiting for a misconfiguration, and deterministic lattice signing plus fault
+/// injection is a demonstrated key-recovery path (eprint 2025/2009).
+///
+/// Neither constructor is reachable from outside the crate:
+///
+/// ```compile_fail
+/// let _ = hux_crypto::traits::SigningRandomness::from_system_rng(32);
+/// ```
+///
+/// ```compile_fail
+/// let _ = hux_crypto::traits::SigningRandomness::explicit(&[0u8; 32]);
+/// ```
+pub struct SigningRandomness(Zeroizing<Vec<u8>>);
+
+impl SigningRandomness {
+    /// `len` fresh bytes from the system CSPRNG. The production constructor.
+    pub(crate) fn from_system_rng(len: usize) -> Self {
+        let mut bytes = Zeroizing::new(vec![0u8; len]);
+        rand::rng().fill_bytes(&mut bytes);
+        Self(bytes)
+    }
+
+    /// Caller-chosen bytes. **Test-only** — compiled out of every non-test build, so it cannot
+    /// reach production signing by any route.
+    #[cfg(test)]
+    pub(crate) fn explicit(bytes: &[u8]) -> Self {
+        Self(Zeroizing::new(bytes.to_vec()))
+    }
+
+    /// Read access for scheme implementations.
+    pub fn as_bytes(&self) -> &[u8] {
+        &self.0
+    }
+}
+
 /// Verification, and the sizes needed to check inputs before attempting it.
 pub trait Verifier {
     fn sizes(&self) -> SchemeSizes;
@@ -65,15 +108,18 @@ pub trait Verifier {
 pub trait Signer {
     fn generate(&self, seed: &[u8]) -> CryptoResult<(Vec<u8>, Vec<u8>)>;
 
-    /// `randomness` is a parameter so the caller decides its source. Production callers MUST pass
-    /// system CSPRNG output; G1 task C9 splits the public entry points so a caller-supplied value
-    /// cannot reach production signing.
+    /// Signs with the supplied per-signature randomness.
+    ///
+    /// The parameter is a [`SigningRandomness`], which **only this crate can construct** — from
+    /// the system CSPRNG in production, or from explicit bytes in this crate's own tests. So the
+    /// trait can be public (a downstream crate may implement a scheme) without being a path by
+    /// which a caller chooses the nonce (G1 task C9, crypto spec §3).
     fn sign(
         &self,
         secret_key: &[u8],
         message: &[u8],
         context: &[u8],
-        randomness: &[u8],
+        randomness: &SigningRandomness,
     ) -> CryptoResult<Vec<u8>>;
 }
 
