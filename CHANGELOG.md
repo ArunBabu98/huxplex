@@ -11,6 +11,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **The transport (G5)** — `hux-network`: QUIC (quinn) behind libp2p's `Transport` trait, TLS 1.3
+  with **native ML-DSA-44 certificates** (`SignatureScheme` 0x0904), `X25519MLKEM768` as the only
+  key exchange, mandatory mutual authentication, ALPN `huxplex/{network}/1`, 1-RTT resumption on,
+  0-RTT off ([ADR-0019](docs/adr/0019-transport-authentication.md)). The libp2p `PeerId` is the
+  identity-multihash encoding of the Huxplex one ([ADR-0021](docs/adr/0021-peer-identity-across-libp2p.md)).
+  A `Node` runs GossipSub (validate-before-forward, content-addressed ids) and Kademlia (records
+  accepted only if valid, on-network and keyed by their signer), driven by a peer lifecycle with
+  backoff and offence-based bans. G5-T1…T7 and the 5-node exit test pass, including a live
+  attacker peer, 20% packet loss with a healed partition, and the 3× amplification limit
+  **measured on the wire**.
+- **Canonical wire encoding (G2a)** — new crate `hux-types` with the one canonical `Codec`
+  (postcard, decode-re-encode-compare). `GossipMessage` and `DhtEntry` carry the `(role, version)`
+  descriptor first and inside the signed bytes, closing **G1-T6**. Golden encodings freeze the
+  format; 10⁶ random inputs never panic or decode non-canonically.
+- **SLH-DSA-SHAKE-128s (G1 · C7/C8)** on `fips205`, with a RustCrypto `slh-dsa` differential;
+  the 22 gated SLH-DSA tests un-ignored. **G1-T1** complete: a suite-v2 rotation of one role.
+- **X25519 + ML-KEM-768 hybrid KEM and the `Kem` trait (G1 · B5)**; **G1-T5** green.
+- **Byte-exact KATs (G1 · C10)** for ML-DSA-44, ML-KEM-768, SLH-DSA and the hybrid in
+  `crates/hux-crypto/tests/kat/`, each reproduced by an independent implementation.
+- **libcrux ↔ aws-lc-rs ML-DSA differential (G1 · C11).**
+- **The context-string registry as code** (`hux_crypto::context`) and an exhaustive **G1-T2** sweep.
+
+### Changed
+- **Signing randomness is sealed (G1 · C9).** `Signer::sign` takes a `SigningRandomness` only
+  `hux-crypto` can construct; the deterministic path exists only in test builds. The raw
+  `sig::ml_dsa::sign` is crate-private.
+- **Sizes come from the scheme (G1 · C6).** `SchemeSizes` gained `signing_randomness`;
+  `Keypair::generate_from_seed` added for schemes whose seed is not 32 bytes.
+- **Wire format of `GossipMessage` / `DhtEntry` (breaking).** Signed over the canonical encoding
+  of every other field; `network` is now `context::Network`; topics must be canonical; DHT records
+  must be keyed by their signer's `PeerId`.
+- **Reproducible builds cover C (G0-7).** The CI job runs in a digest-pinned container and
+  `check-reproducible.sh` also compares AWS-LC's rlib; `deny.toml` bans aws-lc-rs's `fips` feature.
 - **Byte-exact KATs for SHAKE-256 and HKDF-SHA-256 session keys (G1 · C10, in part)** —
   `crates/hux-crypto/tests/kat_hashes.rs`. Includes all three vectors at the 1,312-byte ML-DSA-44
   key length, the only length that occurs when deriving a `PeerId`, and the published FIPS 202

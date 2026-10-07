@@ -1,53 +1,58 @@
 # 01 — Outstanding work: what must be completed and tested
 
-> **As of 2026-09-23, at `d8e3c85`.** Derived from the audit in
-> [`00-layer0-v1-completion-report.md`](00-layer0-v1-completion-report.md). This is the *complete*
-> remaining path to "Layer 0 for v1 is done", in the order it should be done.
+> **As of 2026-10-07, at the head of `layer0/g1-remaining`.** Originally written 2026-09-23 from
+> the audit in [`00-layer0-v1-completion-report.md`](00-layer0-v1-completion-report.md) as the
+> *complete* remaining path to "Layer 0 for v1 is done". **That path has now been walked end to
+> end.** Every task below is implemented and every Layer-0 gate test passes locally; what is left
+> is the one thing standing rule #1 requires — **the gates going green in CI**.
 >
-> **Phase A is complete — G0 is closed. Phase B is 5 of 11 — the registry (C1–C5) is in.**
-> Start at **B2 (C6)**, then C9 → C10 → C7/C8 → B5. **Both blocking decisions were taken on
-> 2026-09-30** ([ADR-0021](../adr/0021-peer-identity-across-libp2p.md),
-> [ADR-0022](../adr/0022-g2-split-wire-and-consensus-encoding.md)) — nothing left is blocked on a
-> decision.
->
-> Nothing here is new scope. Every item traces to
+> Nothing here was new scope. Every item traces to
 > [`16-action-plan.md`](../16-action-plan.md), [`18-implementation-plan/`](../18-implementation-plan/)
-> or [`15-specifications/06-v1-scope.md`](../15-specifications/06-v1-scope.md). Where this file
-> adds something, it is marked **(new — found 2026-09-23)** and says why.
+> or [`15-specifications/06-v1-scope.md`](../15-specifications/06-v1-scope.md). Where the work
+> *found* something the plan did not anticipate, it is marked **(found 2026-10-07)**.
 
-## The remaining path, in order
+## The path, as walked
 
-| # | Step | Why here | Blocked by |
+| # | Step | Commit | Result |
 |---|---|---|---|
-| 1 | **C6** — no size literal outside the suite descriptor | finishes the registry's job; cheapest remaining task | — |
-| 2 | **C9** — split signing into production (CSPRNG-only) and test-only (explicit randomness) | **two functions, not a flag**; unblocks *signature* KATs only | — |
-| 3 | **C10** — remaining KAT fixtures (ML-DSA-44, ML-KEM-768 keygen; then signatures) | hash/KDF half ✅ **done 2026-09-30**; keygen is deterministic and could land now; *signature* vectors still need C9 | partly **C9** |
-| 4 | **C7 / C8** — SLH-DSA-128s on `fips205`, with the RustCrypto differential oracle | un-ignores 22 tests, and **completes G1-T1** by giving the registry a second implemented scheme | — |
-| 5 | **B5** — hybrid X25519 + ML-KEM-768 | **G1-T5**, and G5 needs it | — |
-| 6 | **G1-T2** — exhaustive ordered-pair sweep over the context registry | the role sweep is done; the context sweep is not | — |
-| — | **G1 closes** | | |
-| ✅ | ~~The identity ADR~~ — **taken**: [ADR-0021](../adr/0021-peer-identity-across-libp2p.md), one identity in two encodings | N1 unblocked | *done 2026-09-30* |
-| ✅ | ~~The G2 ordering question~~ — **taken**: [ADR-0022](../adr/0022-g2-split-wire-and-consensus-encoding.md), G2a/G2b split | Layer 0 = G0+G1+**G2a**+G5 | *done 2026-09-30* |
-| 7 | **G2a** — canonical `Codec` + canonical decode for `GossipMessage` and `DhtEntry`, carrying the `(role, version)` descriptor | G5's entry condition; also where **G1-T6** finally closes | G1 |
-| 8 | **N0b, N1–N11** — the transport | | 7 |
-| — | **G5 closes → Layer 0 complete** | | |
-
-**Nothing on this path is blocked on a decision any more.** The two that were — peer identity
-and the G2 ordering gap — were taken on 2026-09-30 and are recorded as ADR-0021 and ADR-0022.
-Everything remaining is implementation, in the order above.
-
-> **Why G2a moved into Layer 0.** The definition read G0+G1+G5 while G5's entry condition was G2,
-> so Layer 0 could not complete without a gate its own definition omitted. G2 now splits along
-> the wire/state line — G2a is the two types that go on the wire, and it is the *only* encoding
-> work Layer 0 needs. The `DhtEntry` forgery was the cost of not having that discipline before
-> the envelope code shipped.
+| 1 | **C6** — no size literal outside the suite descriptor | `3fd4379` | ✅ a dummy scheme with foreign sizes drives keygen and signing unchanged |
+| 2 | **C9** — production signing CSPRNG-only; test-only explicit randomness | `abb08eb` | ✅ `SigningRandomness` constructible only inside `hux-crypto`; `compile_fail` doctests prove it |
+| 3 | **C10** — ML-DSA-44 and ML-KEM-768 KATs | `2f022a9` | ✅ fixtures in `tests/kat/`, reproduced by RustCrypto `ml-dsa` / `ml-kem` |
+| 4 | **C7 / C8** — SLH-DSA-SHAKE-128s on `fips205`, RustCrypto differential | `b3a3dc6` | ✅ 22 tests un-ignored; **G1-T1 complete** |
+| 5 | **B5** — hybrid X25519 + ML-KEM-768, and the `Kem` trait | `453771d` | ✅ **G1-T5 green**; X25519 matches RFC 7748 §6.1 |
+| 6 | **G1-T2** — exhaustive context sweep | `25d89f4` | ✅ the §5 registry as code; 650 ordered pairs |
+| 6′ | **C11** — libcrux ↔ aws-lc-rs ML-DSA differential | `f1449df` | ✅ also the crypto half of G5-T7 |
+| 7 | **G2a** — canonical `Codec`; `GossipMessage`, `DhtEntry` carry the descriptor | `be2ee69` | ✅ G2-T1/T2/T4 green; **G1-T6 complete**; wire v1 frozen |
+| 8 | **N0b, N1–N11** — the transport; **G0-7** | `6983ca2` | ✅ G5-T1…T7 green; 5-node exit test passes |
+| — | **CI green on the three-architecture matrix → G1, G2a, G5 close → Layer 0 complete** | | ⏳ **the only step left** |
 
 ✅ **[Issue #12](https://github.com/ArunBabu98/huxplex/issues/12) is closed** — the digest-stack
-upgrade landed 2026-09-30 ([#20](https://github.com/ArunBabu98/huxplex/pull/20),
-[#21](https://github.com/ArunBabu98/huxplex/pull/21)). It did not need full C10: SHAKE-256 moved
-to `libcrux-sha3` (already in the tree, retiring RustCrypto `sha3` entirely), and the hash/KDF
-KATs proved the migration byte-neutral. **`aws-lc-rs` still activates G0-7**, the C-toolchain pin,
-when it enters the tree at G5.
+upgrade landed 2026-09-30, proven byte-neutral by the hash KATs.
+
+## Open items
+
+None blocks Layer 0. Each is a decision for its owner, recorded so it is not rediscovered.
+
+1. **(found 2026-10-07) DHT records: role vs. key purpose.** `DhtEntry` is accepted only when
+   keyed by its signer's `PeerId` — that is what stops a peer squatting another's key (G5-T5). A
+   node's `PeerId` comes from its **`Transport`**-purpose key, so that is the key that signs its
+   record; but crypto spec §5 places `dht:entry` under the **`Transaction`** role. Purposes are not
+   machine-checked, so nothing fails — but it is exactly the purpose/role drift C1 exists to
+   prevent. Options: move `dht:entry` to the `Transport` role (a spec change, and a new context
+   version), or bind a `Transaction` key to the `PeerId` through the validator-registration record.
+   **Owner: protocol.**
+2. **(found 2026-10-07) The first-flight margin is ≈ 150 B.** Measured on the wire by G5-T6 with
+   Initial padding at 1,372 B and 4-byte connection IDs. The structural alternative is TLS **raw
+   public keys** (RFC 7250): the identity *is* the key, so the X.509 wrapper and its self-signature
+   (≈ 2.5 KB of the flight) carry nothing the `CertificateVerify` does not. That would be an
+   ADR-0019 change. **Owner: networking.**
+3. **SLH-DSA keys have no HD derivation path.** BIP32 yields 32 bytes; SLH-DSA-128s needs a 48-byte
+   seed. `Keypair::generate` refuses rather than inventing a derivation;
+   `Keypair::generate_from_seed` takes the 48 bytes. The `Identity` key's derivation needs
+   specifying before validator registration exists. **Owner: crypto.**
+4. **`multibase` is pinned at 0.9.2** in `Cargo.lock` because `base45` 3.2 needs rustc 1.88
+   without declaring it. A `cargo update` without `--precise` will break the 1.85 build; the pin
+   lifts when the toolchain moves. **Owner: build.**
 
 ---
 
@@ -149,7 +154,7 @@ not `112 / 0 / 84`. Commit `63ad3d5` un-ignored three size-constant assertions. 
 
 > **Entry:** G0 closed. **Unblocks:** G2, and therefore everything.
 > Full task breakdown: [`18-implementation-plan/02-g1-crypto-core.md`](../18-implementation-plan/02-g1-crypto-core.md).
-> **5 of 11 tasks done** — the registry (C1–C5) landed 2026-09-23; C6–C11 remain.
+> **11 of 11 tasks done** — the registry (C1–C5) landed 2026-09-23; C6–C11 and B5 2026-10-07.
 >
 > **Order matters: the registry comes before the primitives.** A primitive written first will be
 > called directly from somewhere, and that call site will survive. That ordering held, and it is
@@ -190,14 +195,14 @@ confinement first, the abstraction second.
 > **Keep the registry dumb** — a lookup table plus a dispatch, not a policy engine. Where the table
 > *lives on-chain* is a G3 question. It was built that way and should stay that way.
 
-### B2 · Remove the hard-coded sizes (C6) ⬅️ **next**
+### B2 · Remove the hard-coded sizes (C6) ✅ *done 2026-10-07*
 
 Half-started by the registry: `traits::SchemeSizes` already exposes sizes *from the resolved
 scheme*, and `c6_sizes_are_available_from_the_resolved_scheme` asserts a caller can read them
 without naming a literal. What remains is that the literals still live in `sig/ml_dsa.rs`, and
 nothing has yet proved a *second* scheme can be registered without touching one.
 
-- [ ] **C6** No size literal outside the suite descriptor. Remaining sites: the `PK_LEN` /
+- [x] **C6** No size literal outside the suite descriptor. Remaining sites: the `PK_LEN` /
       `SK_LEN` / `SIG_LEN` / `SEED_LEN` constants in
       [`sig/ml_dsa.rs`](../../crates/hux-crypto/src/sig/ml_dsa.rs) — legitimate *there*, as the
       scheme's own definition, but every consumer must read them via `SchemeSizes`.
@@ -210,52 +215,52 @@ nothing has yet proved a *second* scheme can be registered without touching one.
 > test is the only thing that catches a shallow job — an assertion that the *current* sizes are
 > readable does not.
 
-### B3 · SLH-DSA-128s (C7–C8)
+### B3 · SLH-DSA-128s (C7–C8) ✅ *done 2026-10-07*
 
-- [ ] **C7** Implement on **`fips205`** (pure Rust, no `unsafe`). Sizes 32 / 64 / 7,856.
+- [x] **C7** Implement on **`fips205`** (pure Rust, no `unsafe`). Sizes 32 / 64 / 7,856.
       **Test:** the **22** `slh_dsa_128s_tests` pass with `#[ignore]` removed.
       *(The plan says 24; the count is 22 as of `63ad3d5` — three were un-ignored, of which two
       were SLH-DSA size assertions that already pass.)*
-- [ ] **C8** CI differential test against RustCrypto `slh-dsa` — **dev-dependency only**.
+- [x] **C8** CI differential test against RustCrypto `slh-dsa` — **dev-dependency only**.
       **Test:** same seed ⇒ identical key and signature bytes; a deliberate mutation fails.
 
-### B4 · Secret hygiene and KATs (C9–C11)
+### B4 · Secret hygiene and KATs (C9–C11) ✅ *done 2026-10-07*
 
-- [ ] **C9** Split signing into two functions: production signing sources randomness from the
+- [x] **C9** Split signing into two functions: production signing sources randomness from the
       system CSPRNG and **cannot** accept a caller-supplied value; a separate test-only entry point
-      takes explicit randomness. Today `Keypair::sign` calls `rand::rng()` unconditionally and has
-      no deterministic path.
+      takes explicit randomness. **Done:** `Signer::sign` takes a `SigningRandomness` only
+      `hux-crypto` can construct; `Keypair::sign_with_randomness` exists only under `cfg(test)`,
+      and `compile_fail` doctests prove neither is reachable from the public API.
       > **Two functions, not one with a flag.** A `deterministic: bool` is a downgrade switch
       > waiting for a misconfiguration, and deterministic lattice signing plus fault injection is a
       > demonstrated key-recovery path.
       > **C9 blocks C10:** without it, signature KATs cannot be pinned at all.
-- [ ] **C10** Byte-exact KAT fixtures for ML-DSA-44, ML-KEM-768, SLH-DSA-128s and the hash domains
+- [x] **C10** Byte-exact KAT fixtures for ML-DSA-44, ML-KEM-768, SLH-DSA-128s and the hash domains
       ([ADR-0010](../adr/0010-hash-function-domains.md)); signature fixtures pin the 32-byte
-      randomness. **None exist in the tree today** — there is no fixtures directory and no
-      committed vectors.
-- [ ] **C11** `libcrux` ↔ `aws-lc-rs` ML-DSA differential test
+      randomness. **Done:** `crates/hux-crypto/tests/kat/` — ML-DSA-44, ML-KEM-768, SLH-DSA-128s,
+      the hybrid KEM, plus the earlier hash/KDF vectors; every one reproduced by an independent
+      implementation.
+- [x] **C11** `libcrux` ↔ `aws-lc-rs` ML-DSA differential test
       ([ADR-0019](../adr/0019-transport-authentication.md) condition 4).
 
-### B5 · Hybrid key agreement
+### B5 · Hybrid key agreement ✅ *done 2026-10-07*
 
-- [ ] Hybrid X25519 + ML-KEM-768, needed by G5. Does not exist; `kem.rs` is ML-KEM only.
+- [x] Hybrid X25519 + ML-KEM-768 — `kem/hybrid.rs`, TLS `X25519MLKEM768` layout, HKDF combiner binding the X25519 values (X-Wing). `Kem` trait landed with it.
 
 ### G1 gate tests — current state
 
 | ID | Property | Today |
 |---|---|---|
-| **G1-T1** | Algorithm rotation without state migration — register a second scheme, flip **one role's** default; old objects still verify, other roles untouched, zero state-structure changes | 🟡 **half** — descriptor half proven; rotation needs a second *implemented* scheme → **C7** |
-| **G1-T2** | Cross-context replay fails — **exhaustive over every ordered pair** of registry contexts, including `dht:entry` | 🟡 three good tests exist; the exhaustive *context* sweep is still to do (the *role* sweep is done) |
-| **G1-T3** | KAT byte-exactness on **both** architectures | ❌ blocked on **C9 → C10** |
+| **G1-T1** | Algorithm rotation without state migration — register a second scheme, flip **one role's** default; old objects still verify, other roles untouched, zero state-structure changes | 🟢 **green locally** — a test-only suite v2 flips `QuorumCert` to SLH-DSA (`suite/registry.rs`) |
+| **G1-T2** | Cross-context replay fails — **exhaustive over every ordered pair** of registry contexts, including `dht:entry` | 🟢 **green locally** — 650 ordered pairs, enumerated from `hux_crypto::context` |
+| **G1-T3** | KAT byte-exactness on **both** architectures | 🟢 **green locally** (arm64) — needs the CI matrix for the "both architectures" half |
 | **G1-T4** | Unknown algorithm ID — and unknown **role** — rejected, never ignored | 🟢 **green** — five tests |
-| **G1-T5** | Hybrid retains PQ security if the classical half is broken — force X25519 output to a constant, session keys still differ | ❌ no hybrid → **B5** |
-| **G1-T6** | Role confusion rejected — every ordered pair of roles | 🟡 **structural half** — roles proven pairwise distinct; binding a *signature* to its role needs the descriptor on the wire → **G2** |
+| **G1-T5** | Hybrid retains PQ security if the classical half is broken — force X25519 output to a constant, session keys still differ | 🟢 **green locally** — `kem/hybrid.rs` |
+| **G1-T6** | Role confusion rejected — every ordered pair of roles | 🟢 **green locally** — closed by G2a: the descriptor is signed (`wire_encoding.rs`) |
 
-> **G1-T6 cannot fully close inside G1.** Proving a signature is bound to its role requires the
-> descriptor to be *carried on the signed object*, which is G2's canonical encoding. G1 can prove
-> the roles are distinct and that a mismatch is refused; it cannot prove the binding until there
-> is an encoding to bind it in. Worth deciding explicitly whether G1 exits with T6 at its
-> structural half, or whether the gate waits on G2 — see the ordering question in Phase C.
+> **G1-T6 closed through G2a**, as ADR-0022 anticipated: the descriptor is the first field of
+> every wire envelope and inside the signed preimage, so a relabelled role is refused as
+> `RoleMismatch` *and* the original signature fails over the relabelled bytes.
 
 **G1 exit:** ~~registry is the only path to a primitive~~ ✅ (enforced mechanically, not by
 convention); SLH-DSA green and un-ignored; KATs committed and green on both architectures;
@@ -272,8 +277,8 @@ convention); SLH-DSA green and un-ignored; KATs committed and green on both arch
 > here because Layer 0 is not complete without it, not because it can start next.
 > Full breakdown: [`18-implementation-plan/03-g5-transport.md`](../18-implementation-plan/03-g5-transport.md).
 >
-> Today: **five files, 209 lines**, with no `libp2p`, `quinn`, `rustls`, `aws-lc-rs` or `tokio`
-> anywhere in `Cargo.lock`.
+> **As built (2026-10-07):** `hux-network/src/transport/` (cert, tls, quic, p2p, muxer, socket),
+> `peers.rs` and `node.rs` — libp2p **0.56** (rustc 1.85), quinn 0.11, rustls 0.23.45 on aws-lc-rs.
 
 ### C0 · The N0 spike ✅ *closed 2026-09-23*
 
@@ -322,74 +327,74 @@ Available *because* N0 chose outcome 3: Huxplex constructs the `(PeerId, StreamM
 itself. Under `libp2p-quic` it would not be — recorded as a standing condition, not an assumption.
 
 **Carry into N0b/N2 as acceptance criteria** (ADR-0021 rules I1–I5), in particular:
-- [ ] **I3** — conversion is total and lossless, asserted in **both** directions.
-- [ ] **I4** — compile-time assertion that the Huxplex `PeerId` stays ≤ 42 bytes, so a future
+- [x] **I3** — conversion is total and lossless, asserted in **both** directions.
+- [x] **I4** — compile-time assertion that the Huxplex `PeerId` stays ≤ 42 bytes, so a future
       hash change fails the build rather than the network.
-- [ ] **I5** — the TLS verifier is the sole authority; the libp2p `PeerId` is derived from its
+- [x] **I5** — the TLS verifier is the sole authority; the libp2p `PeerId` is derived from its
       verified output, never trusted as received.
 
-### C0c · New from the spike
+### C0c · New from the spike ✅
 
-- [ ] **N0b** Drive `quinn` 0.11 behind libp2p's `Transport` trait; add `quinn` and
+- [x] **N0b** Drive `quinn` 0.11 behind libp2p's `Transport` trait; add `quinn` and
       `rustls` 0.23.45 (`aws-lc-rs`, non-FIPS) as direct dependencies. `libp2p-quic` is not the
       transport.
       > The upside of outcome 3: N1–N5 become *implementation* rather than integration, and every
       > ADR-0019 requirement — ALPN, mutual auth, custom verifier, 0-RTT off, Initial padding —
       > becomes directly expressible on a config Huxplex constructs. **G5-T6**'s ≈130-byte
       > amplification margin is far easier to assert that way.
-- [ ] **Amend ADR-0019** to record outcome 3 and why outcome 2 failed (libp2p-identity, not
+- [x] **Amend ADR-0019** to record outcome 3 and why outcome 2 failed (libp2p-identity, not
       libp2p-tls).
 
-### C1 · Certificates and authentication (N1–N5)
+### C1 · Certificates and authentication (N1–N5) ✅ *done 2026-10-07*
 
-- [ ] **N1** Self-signed X.509: SPKI = ML-DSA-44 public key, ML-DSA-44 self-signature,
+- [x] **N1** Self-signed X.509: SPKI = ML-DSA-44 public key, ML-DSA-44 self-signature,
       `SignatureScheme` `mldsa44` = **0x0904**; key is the `Transport` purpose
       `m/44'/931931'/4'/0'/{i}'` — already derivable today.
-- [ ] **N2** Custom `ServerCertVerifier` / `ClientCertVerifier`: verify self-signature →
+- [x] **N2** Custom `ServerCertVerifier` / `ClientCertVerifier`: verify self-signature →
       `SHAKE-256(spki)[..32]` → compare to expected `PeerId` → abort on mismatch.
       **No CA, no trust store, no name checking, no revocation.**
-- [ ] **N3** **Mutual** authentication; an unauthenticated peer never reaches an application stream.
-- [ ] **N4** ALPN `huxplex/{network}/1`; QUIC refuses cross-network dials before Huxplex code runs.
-- [ ] **N5** Pin `rustls` ≥ 0.23.44, `aws-lc-rs` provider, **non-FIPS**; add `aws-lc-rs` /
+- [x] **N3** **Mutual** authentication; an unauthenticated peer never reaches an application stream.
+- [x] **N4** ALPN `huxplex/{network}/1`; QUIC refuses cross-network dials before Huxplex code runs.
+- [x] **N5** Pin `rustls` ≥ 0.23.44, `aws-lc-rs` provider, **non-FIPS**; add `aws-lc-rs` /
       `aws-lc-sys` to `deny.toml` review — a deliberate principle-8 exception.
-- [ ] **G0-7 lands here:** pin the C toolchain (a container image with a fixed `cc`), referenced
+- [x] **G0-7 lands here:** pin the C toolchain (a container image with a fixed `cc`), referenced
       from CI *and* the reproducible-build documentation.
       **Acceptance:** `scripts/check-reproducible.sh` still passes with `aws-lc-rs` in the tree.
       > **Stop condition (R4).** If a pinned container cannot produce byte-identical artifacts, the
       > decision returns to ADR-0019's addendum. Do **not** weaken the reproducibility requirement.
 
-### C2 · Transport behaviour (N6–N8)
+### C2 · Transport behaviour (N6–N8) ✅ *done 2026-10-07*
 
-- [ ] **N6** Pad the client Initial so the responder's ≈7,970 B first flight stays inside RFC 9000
+- [x] **N6** Pad the client Initial so the responder's ≈7,970 B first flight stays inside RFC 9000
       §8.1's 3× budget. **~130 bytes of headroom — see R3.**
-- [ ] **N7** 1-RTT resumption **on**, 0-RTT early data **off**. **Test:** early data is refused.
-- [ ] **N8** Peer lifecycle state machine: `Disconnected → Connecting → Handshaking → Identified →
+- [x] **N7** 1-RTT resumption **on**, 0-RTT early data **off**. **Test:** early data is refused.
+- [x] **N8** Peer lifecycle state machine: `Disconnected → Connecting → Handshaking → Identified →
       Active`, with backoff and banning. **Test:** a peer's messages are not processed before
       `Identified`.
 
-### C3 · Discovery and messaging (N9–N11)
+### C3 · Discovery and messaging (N9–N11) ✅ *done 2026-10-07*
 
-- [ ] **N9** Kademlia DHT over the existing signed `DhtEntry`; DHT key = publisher's `PeerId`;
+- [x] **N9** Kademlia DHT over the existing signed `DhtEntry`; DHT key = publisher's `PeerId`;
       verify before routing.
-- [ ] **N10** GossipSub for mempool / intents / control, reusing the existing signed envelopes;
+- [x] **N10** GossipSub for mempool / intents / control, reusing the existing signed envelopes;
       message-ID dedup, **no re-signing on forward**.
-- [ ] **N11** Peer scoring plus penalties for invalid signatures, cross-context replay attempts and
+- [x] **N11** Peer scoring plus penalties for invalid signatures, cross-context replay attempts and
       spam.
 
 > **Do not** build erasure-coded block broadcast at this gate. v1 may carry blocks over GossipSub;
 > the guardrail is only that nothing above the transport may *assume* it (**R5**).
 
-### G5 gate tests — all to be written
+### G5 gate tests — all written, all green locally
 
 | ID | Property | Today |
 |---|---|---|
-| **G5-T1** | Authenticated handshake, no downgrade: classical-only rejected; MITM certificate fails the `PeerId` check; no client certificate ⇒ no application stream; cross-network ALPN refused by QUIC | ❌ |
-| **G5-T2** | `PeerId` is bound to the key | 🟡 struct-level; extend to a live connection |
-| **G5-T3** | Gossip amplification bounded under a flood of malformed and unsigned messages; offender scored down and disconnected | ❌ |
-| **G5-T4** | Propagation under 20% loss and a healed partition; all honest nodes converge | ❌ |
-| **G5-T5** | Signed DHT entries reject forgery and replay, including cross-network | 🟡 struct-level; extend to the live DHT |
-| **G5-T6** | Responder's first flight never exceeds 3× bytes received, **measured on the wire**, re-asserted whenever the suite changes | ❌ |
-| **G5-T7** | A TLS `CertificateVerify` signature must not verify as any Huxplex protocol signature, and no `huxplex-…:v1` signature may be accepted by the TLS layer — for every registry context | ❌ |
+| **G5-T1** | Authenticated handshake, no downgrade: classical-only rejected; MITM certificate fails the `PeerId` check; no client certificate ⇒ no application stream; cross-network ALPN refused by QUIC | 🟢 `tests/transport.rs` — all four refused in the handshake |
+| **G5-T2** | `PeerId` is bound to the key | 🟢 live — an impostor presenting a copied certificate is refused in both directions |
+| **G5-T3** | Gossip amplification bounded under a flood of malformed and unsigned messages; offender scored down and disconnected | 🟢 `tests/network.rs` — real attacker peer; banned, disconnected, nothing forwarded |
+| **G5-T4** | Propagation under 20% loss and a healed partition; all honest nodes converge | 🟢 `tests/network.rs` — in-process datagram filter, 5 nodes |
+| **G5-T5** | Signed DHT entries reject forgery and replay, including cross-network | 🟢 live DHT — squatting, re-keying and cross-network records refused by every node |
+| **G5-T6** | Responder's first flight never exceeds 3× bytes received, **measured on the wire**, re-asserted whenever the suite changes | 🟢 2,744 B in, ≈ 8,080 B out of an 8,232 B budget — **(found 2026-10-07)** the planned ≈ 130 B margin was ≈ 20 B until padding and CIDs were re-sized |
+| **G5-T7** | A TLS `CertificateVerify` signature must not verify as any Huxplex protocol signature, and no `huxplex-…:v1` signature may be accepted by the TLS layer — for every registry context | 🟢 every registry context, both directions; TLS context pinned **empty** |
 
 > **G5-T6 and G5-T7 are the two most likely to be skipped**, and the two that guard the properties
 > nothing else does.
@@ -397,8 +402,8 @@ itself. Under `libp2p-quic` it would not be — recorded as a standing condition
 **G5 exit:** 5 nodes discover each other, mutually authenticate over QUIC with ML-DSA certificates,
 gossip and sustain sessions; abuse tests green; G5-T6 and G5-T7 green; the N0 finding recorded.
 
-**When Phases A, B and C are all closed, Layer 0 is complete** — and G2, canonical encoding, is the
-next gate.
+**When Phases A, B and C are all closed in CI, Layer 0 is complete** — and G2b, the consensus
+encoding, is the next gate.
 
 ---
 

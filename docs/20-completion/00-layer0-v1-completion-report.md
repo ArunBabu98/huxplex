@@ -7,6 +7,17 @@
 > Where this report and the blueprint disagree, this report is describing what happened and the
 > blueprint is describing what was intended.
 
+> ### ⏩ Update — 2026-10-07
+>
+> **Everything this audit found missing has since been built.** G1 (C6–C11, B5), G2a and G5 are
+> implemented on `layer0/g1-remaining`, and every Layer-0 gate test passes locally —
+> **260 passed · 0 failed · 59 ignored**, the 59 all gated G6+ or G10. They are not yet *closed*:
+> per standing rule #1, that takes the CI matrix. The current status, the per-gate evidence and
+> what the work found are in [`README.md`](README.md); the task-by-task record is
+> [`01-outstanding-work.md`](01-outstanding-work.md).
+>
+> The audit below is kept as written — it is the record of where Layer 0 stood on 2026-09-23.
+
 ---
 
 ## 1. Verdict

@@ -57,9 +57,9 @@ finished.
 unlock each gate are in [`../18-implementation-plan/`](../18-implementation-plan/) and
 [`../16-action-plan.md`](../16-action-plan.md). For where the project actually stands against
 them — audited, with the commands behind every claim — see
-[`../20-completion/`](../20-completion/). As of 2026-09-30: **G0 closed; G1 about half done (the
-agility registry is in, SLH-DSA and the KATs are not); G2a and G5 not started.** G2a — canonical
-encoding for the two wire types — joined the definition via
+[`../20-completion/`](../20-completion/). As of 2026-10-07: **G0 closed in CI; G1, G2a and G5
+implemented, every gate test green locally, awaiting their CI run.** G2a — canonical encoding for
+the two wire types — joined the definition via
 [ADR-0022](../adr/0022-g2-split-wire-and-consensus-encoding.md).
 
 ## What each automated check proves

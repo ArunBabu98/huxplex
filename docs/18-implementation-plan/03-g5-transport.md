@@ -195,32 +195,49 @@ has one cause rather than two.
 > wire types need a frozen canonical encoding first — that ordering is what the `DhtEntry`
 > forgery cost us for not having.
 
-| **N0b** ⬜ | *(new, from the N0 finding)* Drive `quinn` 0.11 behind libp2p's `Transport` trait; add `quinn` + `rustls` 0.23.45 as direct dependencies. `libp2p-quic` is not the transport | A QUIC connection established with a Huxplex-constructed `rustls::{Client,Server}Config` |
-| **N1** ⬜ | Generate a self-signed X.509 cert: SPKI = ML-DSA-44 public key, self-signature ML-DSA-44, `SignatureScheme` `mldsa44` = **0x0904** ✅ *confirmed present in rustls 0.23.45* | Cert parses in rustls; key is the `Transport` purpose (`m/44'/931931'/4'/0'/{i}'`) 🟢 |
-| **N2** ⬜ | Custom `ServerCertVerifier` / `ClientCertVerifier`: verify self-signature → `SHAKE-256(spki)[..32]` → compare to expected `PeerId` → abort on mismatch. **No CA, no trust store, no name checking, no revocation.** This verifier is the *sole authority* for identity ([ADR-0021](../adr/0021-peer-identity-across-libp2p.md) I5); the libp2p `PeerId` is derived from its verified output, never trusted as received | **G5-T1**, **G5-T2** |
-| **N3** ⬜ | **Mutual** authentication — responder sends `CertificateRequest`; an unauthenticated peer never reaches an application stream | Part of G5-T1 |
-| **N4** ⬜ | ALPN `huxplex/{network}/1`; QUIC refuses cross-network dials | Part of G5-T1 |
-| **N5** ⬜ | Pin `rustls` ≥ 0.23.44 with the `aws-lc-rs` provider, **non-FIPS**; `deny.toml` entries | ADR-0019 conditions 1–2 |
+| **N0b** ✅ | *(new, from the N0 finding)* Drive `quinn` 0.11 behind libp2p's `Transport` trait; add `quinn` + `rustls` 0.23.45 as direct dependencies. `libp2p-quic` is not the transport | A QUIC connection established with a Huxplex-constructed `rustls::{Client,Server}Config` |
+| **N1** ✅ | Generate a self-signed X.509 cert: SPKI = ML-DSA-44 public key, self-signature ML-DSA-44, `SignatureScheme` `mldsa44` = **0x0904** ✅ *confirmed present in rustls 0.23.45* | Cert parses in rustls; key is the `Transport` purpose (`m/44'/931931'/4'/0'/{i}'`) 🟢 |
+| **N2** ✅ | Custom `ServerCertVerifier` / `ClientCertVerifier`: verify self-signature → `SHAKE-256(spki)[..32]` → compare to expected `PeerId` → abort on mismatch. **No CA, no trust store, no name checking, no revocation.** This verifier is the *sole authority* for identity ([ADR-0021](../adr/0021-peer-identity-across-libp2p.md) I5); the libp2p `PeerId` is derived from its verified output, never trusted as received | **G5-T1**, **G5-T2** |
+| **N3** ✅ | **Mutual** authentication — responder sends `CertificateRequest`; an unauthenticated peer never reaches an application stream | Part of G5-T1 |
+| **N4** ✅ | ALPN `huxplex/{network}/1`; QUIC refuses cross-network dials | Part of G5-T1 |
+| **N5** ✅ | Pin `rustls` ≥ 0.23.44 with the `aws-lc-rs` provider, **non-FIPS**; `deny.toml` entries | ADR-0019 conditions 1–2 |
 
 ### B. Transport behaviour
 
 | ID | Task | Acceptance |
 |---|---|---|
-| **N6** ⬜ | Pad the client Initial so the responder's ≈7,970 B first flight stays inside RFC 9000 §8.1's 3× budget | **G5-T6**, measured on the wire |
-| **N7** ⬜ | 1-RTT session resumption **enabled**; 0-RTT early data **disabled** | A test asserting early data is refused |
-| **N8** ⬜ | Peer lifecycle state machine per [wire spec §3](../15-specifications/05-network-wire-protocol.md): `Disconnected → Connecting → Handshaking → Identified → Active`, with backoff and banning | A peer's messages are not processed before `Identified` |
+| **N6** ✅ | Pad the client Initial so the responder's ≈7,970 B first flight stays inside RFC 9000 §8.1's 3× budget | **G5-T6**, measured on the wire |
+| **N7** ✅ | 1-RTT session resumption **enabled**; 0-RTT early data **disabled** | A test asserting early data is refused |
+| **N8** ✅ | Peer lifecycle state machine per [wire spec §3](../15-specifications/05-network-wire-protocol.md): `Disconnected → Connecting → Handshaking → Identified → Active`, with backoff and banning | A peer's messages are not processed before `Identified` |
 
 ### C. Discovery and messaging
 
 | ID | Task | Acceptance |
 |---|---|---|
-| **N9** ⬜ | Kademlia DHT with signed `DhtEntry` records 🟢; DHT key = publisher's `PeerId`; verify before routing | **G5-T5** extended from struct-level to the live DHT |
-| **N10** ⬜ | GossipSub for mempool / intents / control, reusing the 🟢 signed envelopes; message-ID dedup, no re-signing on forward | **G5-T3**, **G5-T4** |
-| **N11** ⬜ | Peer scoring: GossipSub scoring plus penalties for invalid signatures, cross-context replay attempts, spam | **G5-T3** |
+| **N9** ✅ | Kademlia DHT with signed `DhtEntry` records 🟢; DHT key = publisher's `PeerId`; verify before routing | **G5-T5** extended from struct-level to the live DHT |
+| **N10** ✅ | GossipSub for mempool / intents / control, reusing the 🟢 signed envelopes; message-ID dedup, no re-signing on forward | **G5-T3**, **G5-T4** |
+| **N11** ✅ | Peer scoring: GossipSub scoring plus penalties for invalid signatures, cross-context replay attempts, spam | **G5-T3** |
 
 > **Do not** build erasure-coded block broadcast at this gate. [Wire spec §5.1](../15-specifications/05-network-wire-protocol.md)
 > permits v1 to carry blocks over GossipSub; the guardrail is only that nothing above the
 > transport may *assume* it. The block path is `adr/0020-*` at G6.
+
+## As built — 2026-10-07
+
+All of N0b–N11 are implemented in `crates/hux-network` (`transport/`, `peers.rs`, `node.rs`);
+G5-T1…T7 and the exit test pass locally (`tests/transport.rs`, `tests/network.rs`).
+
+| Choice | Why |
+|---|---|
+| **libp2p 0.56**, not 0.57 | 0.56 / `libp2p-identity` 0.2.14 support the pinned rustc 1.85, so the toolchain bump ADR-0021 anticipated was not needed. The identity multihash works unchanged (I1–I4 tested) |
+| TLS signatures through **libcrux**, empty context | the transport key never leaves `hux-crypto`'s zeroizing types; aws-lc-rs supplies only KEX, AEAD and key schedule. C11 holds the two ML-DSA implementations to identical verdicts |
+| **Dial configs cached per peer** | rustls resumes only under the same verifier `Arc` — a per-dial config silently disabled resumption (found by N7's test) |
+| **Initial padding 1,372 B**, **4-byte connection IDs** | G5-T6 measured the planned 1,350 B / 8-byte IDs at a ≈ 20 B margin, briefly negative. See ADR-0019's 2026-10-07 amendment |
+| Dials must name their peer (`/p2p/<id>`) | the TLS verifier is built for exactly that `PeerId`; there is no "dial and see who answers" |
+| Kademlia learns addresses from inbound connections | one QUIC socket listens and dials, so a peer's remote address *is* its listen address — libp2p `identify` is not usable (its key check cannot accept an ML-DSA identity) |
+| DHT records must be keyed by their signer's `PeerId` | tightened from SHOULD: it is what makes squatting impossible (G5-T5). Raises an open role/purpose question — see `20-completion/01-outstanding-work.md` |
+| **G0-7**: reproducible job in a digest-pinned container | AWS-LC is compiled from C; `check-reproducible.sh` now compares its rlib too. Reproducible locally |
+| `multibase` held at 0.9.2 | `base45` 3.2 needs rustc 1.88 without declaring it |
 
 ## 🎯 Gate tests
 

@@ -1,6 +1,6 @@
 # 05 — Network Wire Protocol Specification
 
-> Normative (🟡 message types exist; transport unbuilt). Defines the handshake, peer lifecycle,
+> Normative (🟢 implemented 2026-10-07: `crates/hux-network`). Defines the handshake, peer lifecycle,
 > and gossip/DHT framing. Justified by [ADR-0012](../adr/0012-network-transport.md)
 > (rust-libp2p/QUIC) and [ADR-0019](../adr/0019-transport-authentication.md) (native ML-DSA TLS
 > certificates). Identifiers, topics, and contexts are from the
@@ -11,14 +11,15 @@
 ## 1. Layers
 
 ```
-L0  Identity     : ML-DSA-44 keypair -> PeerId = SHAKE-256(pk)[..32]      (🟢 implemented)
+L0  Identity     : ML-DSA-44 keypair -> PeerId = SHAKE-256(pk)[..32]      (🟢)
                    transport uses the `Transport` key purpose (ADR-0019)
-L1  Transport    : QUIC (UDP), TCP fallback                               (🟡 libp2p)
+L1  Transport    : QUIC (UDP) — quinn, behind libp2p's Transport trait     (🟢)
 L2  Security     : TLS 1.3 (RFC 9001) — X25519MLKEM768 key agreement,
                    mutual auth with native ML-DSA-44 certificates,
-                   ALPN huxplex/{network}/1                               (🟡)
-L3  Discovery    : libp2p Kademlia DHT; records = signed DhtEntry         (🟢 type / 🟡 swarm)
-L4  Messaging    : libp2p GossipSub; per-message ML-DSA-44 signatures     (🟢 type / 🟡 swarm)
+                   ALPN huxplex/{network}/1                               (🟢)
+L3  Discovery    : libp2p Kademlia DHT; records = signed DhtEntry         (🟢)
+L4  Messaging    : libp2p GossipSub; per-message ML-DSA-44 signatures     (🟢)
+Wire encoding    : canonical Codec (postcard), G2a — §7                    (🟢)
 ```
 
 ## 2. Handshake — TLS 1.3 over QUIC with native ML-DSA certificates
@@ -88,18 +89,28 @@ transport-layer half of the §6 requirement.
 
 RFC 9000 §8.1 caps the responder's pre-validation output at 3× bytes received.
 
+**Measured on the wire** (G5-T6, 2026-10-07 — quinn 0.11, rustls 0.23.45, 4-byte connection IDs):
+
 | Flight | Bytes |
 |---|---|
-| Client Initial (ClientHello + `X25519MLKEM768`), **padded** | ≈ 2,700 |
-| **Budget (3×)** | **≈ 8,100** |
-| ServerHello | ≈ 1,220 |
-| Certificate | ≈ 4,130 |
-| CertificateVerify (ML-DSA-44) | ≈ 2,420 |
-| EncryptedExtensions + CertificateRequest + Finished | ≈ 200 |
-| **Responder first flight** | **≈ 7,970** |
+| Client Initial (ClientHello + `X25519MLKEM768`), two datagrams **padded to 1,372 B** | **2,744** |
+| **Budget (3×)** | **8,232** |
+| Certificate (DER) | 3,839 |
+| CertificateVerify (ML-DSA-44) | 2,420 |
+| ServerHello, EncryptedExtensions, CertificateRequest, Finished, QUIC framing and AEAD | ≈ 1,700 |
+| `NEW_CONNECTION_ID` packet quinn sends once it has 1-RTT keys (0.5-RTT) | ≈ 120 |
+| **Responder output before address validation** | **≈ 8,075 – 8,085** — margin ≈ 150 B |
 
 The initiator MUST pad its Initial so the responder's first flight stays within 3×. Padding is
 preferred to QUIC Retry, which costs a round trip on every first contact.
+
+> ⚠️ *Corrected 2026-10-07.* This table previously estimated ≈ 7,970 B against an ≈ 8,100 B budget
+> (1,350-byte padding) — a ≈ 130 B margin. Measurement found ≈ 20 B, and briefly a deficit: the
+> estimate omitted QUIC packet overhead and the 0.5-RTT `NEW_CONNECTION_ID` packet, and quinn sends
+> a full datagram while *any* budget remains (quinn #1082). The parameters are now **1,372-byte
+> Initial padding** — the largest UDP payload that fits a 1,420-byte IPv6 tunnel MTU — and
+> **4-byte connection IDs**. Zero-length IDs would remove the 0.5-RTT packet but cannot
+> demultiplex a node's simultaneous connections to one remote socket.
 
 ⚠️ **The margin is thin by design.** Anything added to the responder's first flight — a larger
 parameter set, an extra certificate, an SLH-DSA identity proof (7,856 B alone) — breaks it.
@@ -140,17 +151,22 @@ is a conformance item to confirm against the published RFC.
   (Hostile-agent / spam mitigation, risk #6.)
 
 ## 4. Discovery (Kademlia DHT)
-- Records are `DhtEntry { key, value, network, sig, signer_pk }`, signed over the **length-framed**
-  payload `u64_be(len(key)) ‖ key ‖ u64_be(len(value)) ‖ value`, with context
-  `huxplex-{network}:dht:entry:v1` (crypto spec §6.3) 🟢.
+- Records are `DhtEntry { suite, network, key, value, signer_pk, sig }` in the canonical wire
+  encoding (§7), signed over the encoding of every field but `sig`, with context
+  `huxplex-{network}:dht:entry:v1` (crypto spec §5). *(Until G2a the payload was the hand-framed
+  `u64_be(len(key)) ‖ key ‖ u64_be(len(value)) ‖ value`; the codec's length prefixes now carry
+  that property.)*
   > ⚠️ *Corrected 2026-09-23.* This previously specified the bare concatenation `key‖value`, which
   > does not encode where the key ends: `("abc","XY")` and `("ab","cXY")` sign identically. Since
   > the key decides routing, an attacker could re-split any observed record and republish the
   > publisher's signature **under a different key**, holding no private key — the exact opposite
   > of G5-T5. Framing is normative; implementations MUST NOT sign the bare concatenation.
-- The DHT **key SHOULD be the publisher's `PeerId`**; `value` is its dialable address(es).
-- A node MUST verify a `DhtEntry` signature before using it for routing (prevents routing-table
-  poisoning — covered by existing tamper/wrong-signer tests).
+- The DHT **key MUST be the signer's `PeerId`** — `SHAKE-256(signer_pk)[..32]` — and equal the
+  record key; `value` is its dialable address(es). *(Tightened from SHOULD, 2026-10-07: it is what
+  stops a peer publishing under another's key — G5-T5.)*
+- A node MUST validate a record — decode, verify, network, key — before storing it **and** again
+  before using one it fetched (prevents routing-table poisoning — **G5-T5**, against a live DHT).
+  Inbound records are filtered by the node, never stored by the DHT on its own.
 
 ## 5. Messaging (GossipSub)
 - Topics per crypto spec §6.2: `huxplex/shard/{id}/blocks`, `huxplex/shard/{id}/mempool`,
@@ -161,7 +177,12 @@ is a conformance item to confirm against the published RFC.
   invalidates it).
 - **Message-ID / dedup:** because each signature is 2420 B, the gossip layer MUST deduplicate by
   message id and MUST NOT re-sign on forward; validators sign once at origin. (PQ-bloat
-  mitigation, risk #2.)
+  mitigation, risk #2.) The message id is **SHAKE-256 of the encoded envelope** — content
+  addressed — and GossipSub runs *anonymous*: its own signing would need a libp2p key, and every
+  envelope already carries an ML-DSA signature.
+- **Validate before forward.** A message is decoded, bound to its topic and network, and
+  verified *before* it is accepted or relayed; a refused message is never forwarded, and the
+  delivering peer is penalised (§3). This is what bounds amplification (**G5-T3**).
 - Max payload sizes per topic are governance parameters; the signing path already handles ≥64 KB
   payloads (tested).
 
@@ -196,6 +217,34 @@ This is a hard requirement, verified by cross-network rejection tests.
 network-parameterized, and cross-network replay rejection is now tested for DHT entries as well
 as gossip (`test_dht_entry_cross_network_replay_fails`). "or will embed" no longer applies to any
 implemented type; see [cryptography spec §5](02-cryptography-spec.md) rule 2.
+
+## 7. Wire encoding — NORMATIVE (G2a)
+
+✅ *Frozen 2026-10-07* ([ADR-0022](../adr/0022-g2-split-wire-and-consensus-encoding.md)). Every
+envelope is encoded through the canonical `Codec` (postcard; ADR-0011), decoded canonically
+(decode, re-encode, reject on any difference), and laid out as **body ‖ signature**:
+
+```text
+GossipMessage = suite ‖ network ‖ topic   ‖ payload ‖ from      ‖ sig
+DhtEntry      = suite ‖ network ‖ key     ‖ value   ‖ signer_pk ‖ sig
+                └─────────── body: the bytes the signature covers ──┘
+
+suite     = role: varint u32 ‖ version: varint u16         (ADR-0011 rule 3′: both axes)
+network   = code: u8                                         (1 = mainnet, 2 = testnet; 0 never)
+topic     = len ‖ UTF-8, canonical form only (crypto spec §6.2; no leading zeros, no sign)
+payload, key, value = len ‖ bytes
+from, signer_pk     = scheme: varint u16 ‖ len ‖ key   (len MUST equal the scheme's key size)
+sig                 = scheme: varint u16 ‖ len ‖ sig   (len MUST equal the scheme's signature size)
+```
+
+- **The descriptor is first and is signed**, so a signature is bound to its role (**G1-T6**): a
+  relabelled role is refused as role confusion, and the signature does not verify over the
+  relabelled bytes.
+- Every identifier is encoded by its **registry code**, never a serde variant index, and decoding
+  fails closed on any unregistered value.
+- An envelope over 4 MiB is refused by length before decoding.
+- Golden encodings of both envelopes are committed (`crates/hux-network/tests/wire/`); a change
+  that alters them is a network-breaking change.
 
 ---
 

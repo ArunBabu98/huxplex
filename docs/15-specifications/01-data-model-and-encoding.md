@@ -6,8 +6,8 @@
 > [ADR-0010](../adr/0010-hash-function-domains.md) (hashing), and
 > [ADR-0003](../adr/0003-state-model-hrm.md) (HRM).
 >
-> Keywords per [RFC 2119](https://www.rfc-editor.org/rfc/rfc2119). Status: 🟡 specified; only the
-> primitive crypto/network types exist in code today.
+> Keywords per [RFC 2119](https://www.rfc-editor.org/rfc/rfc2119). Status: 🟢 the `Codec` and the
+> wire types (G2a, `crates/hux-types`, 2026-10-07); 🟡 the consensus types (G2b) are specified only.
 
 ## 1. Encoding rules (the determinism contract)
 
@@ -23,8 +23,12 @@
    the canonical byte order of their keys. No hash-map iteration order may leak into bytes.
 6. **Explicit optionals & enums.** `Option`/enum tags are encoded explicitly; `#[serde(flatten)]`,
    untagged enums, and aliasing that breaks 1:1 round-tripping are FORBIDDEN.
-7. **Versioning.** Every top-level signed object begins with a 1-byte (or varint) **algorithm-suite
-   id** (ADR-0002). Decoders MUST reject unknown suite ids rather than guessing.
+7. **Versioning.** Every top-level signed object begins with the **`(role, version)` descriptor**
+   (ADR-0011 rule 3′, ADR-0018), inside the signed bytes. Decoders MUST reject an unknown role or
+   suite version rather than guessing.
+8. **Registry codes on the wire.** Every identifier (role, version, scheme, network) is encoded by
+   its registry discriminant, never by a serde variant index — reordering an enum must not be
+   able to change a byte.
 
 ## 2. Primitive types (exist in code, 🟢)
 
@@ -33,11 +37,12 @@
 | `PublicKey` | `{ scheme, bytes }` | scheme tag + 1312-byte ML-DSA-44 key |
 | `PrivateKey` | `{ scheme, bytes }` | never serialized to chain; local custody only |
 | `Signature` | `{ scheme, bytes }` | scheme tag + 2420-byte ML-DSA-44 sig |
-| `SignatureSchemeId` | enum `{ Dilithium2 }` | suite tag (extensible under agility) |
+| `SignatureSchemeId` | enum `{ Dilithium2 = 1, SlhDsa128s = 2 }` | varint `u16` registry code; `0` never assigned |
+| `AlgoSuite` | `{ role: SigRole, version: SuiteVersion }` | varint `u32` ‖ varint `u16` |
 | `PeerId` | `[u8; 32]` | raw 32 bytes; hex display 64 lowercase chars |
 | `GossipTopic` | newtype `String` | UTF-8 topic string (§ crypto spec §6.2) |
-| `GossipMessage` | `{ topic, network, payload, sig, from }` | see crypto spec §6.3 |
-| `DhtEntry` | `{ key, value, network, sig, signer_pk }` | signs the **length-framed** payload `u64_be(len(key)) ‖ key ‖ u64_be(len(value)) ‖ value`. The bare `key‖value` concatenation it replaced was **forgeable across the field boundary** — see [ADR-0011](../adr/0011-canonical-serialization.md) rule 5′ |
+| `GossipMessage` | `{ suite, network, topic, payload, from, sig }` | canonical `Codec`, frozen at G2a — [wire spec §7](05-network-wire-protocol.md) |
+| `DhtEntry` | `{ suite, network, key, value, signer_pk, sig }` | canonical `Codec`, frozen at G2a — [wire spec §7](05-network-wire-protocol.md). Supersedes the hand-framed payload that replaced the forgeable `key‖value` ([ADR-0011](../adr/0011-canonical-serialization.md) rule 5′) |
 
 ## 3. Consensus types (to be built, 🟡)
 
