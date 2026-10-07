@@ -31,6 +31,11 @@ pub enum CryptoError {
     #[error("Signing failed: {0}")]
     SigningFailed(String),
 
+    /// A network name outside the registry (`hux_crypto::context::Network`). Fails closed: a
+    /// context string for an unregistered network is a context no verifier recognises.
+    #[error("unregistered network: {0:?}")]
+    UnknownNetwork(String),
+
     /// A key-agreement input was well-formed but unusable — e.g. a low-order X25519 point.
     #[error("Key agreement failed: {0}")]
     KeyAgreementFailed(String),

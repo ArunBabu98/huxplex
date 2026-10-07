@@ -38,6 +38,30 @@ impl Network {
             _ => None,
         }
     }
+
+    /// The wire code. **Frozen at G2a** — added, never renumbered — and, like every identifier
+    /// in the registry, `0` is never assigned, so a zeroed field cannot be read as a network.
+    pub const fn code(self) -> u8 {
+        match self {
+            Network::Mainnet => 1,
+            Network::Testnet => 2,
+        }
+    }
+
+    /// Resolves a wire code, failing closed on anything unregistered.
+    pub fn from_code(code: u8) -> Option<Self> {
+        match code {
+            1 => Some(Network::Mainnet),
+            2 => Some(Network::Testnet),
+            _ => None,
+        }
+    }
+}
+
+impl core::fmt::Display for Network {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_str(self.as_str())
+    }
 }
 
 /// What a signature is made for. One variant per row of spec §5, except gossip, which is

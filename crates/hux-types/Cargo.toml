@@ -1,6 +1,6 @@
 [package]
-name = "hux-network"
-description = "Huxplex Layer 0 — peer identity, signed gossip and DHT envelopes, and (from G5) the libp2p/QUIC transport."
+name = "hux-types"
+description = "Huxplex — the canonical Codec (ADR-0011) and the wire forms of the core types."
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -12,7 +12,6 @@ workspace = true
 
 [dependencies]
 hux-crypto.workspace = true
-hux-types.workspace = true
+postcard.workspace = true
 serde.workspace = true
 thiserror.workspace = true
-hex.workspace = true

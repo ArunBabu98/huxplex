@@ -4,7 +4,7 @@
 #   docs/10-development/repository-structure.md § Dependency rule (enforced)
 #   "Crates depend downward only (no cycles) … a cycle is a build failure."
 #
-# Layer 0 today:  hux-network → hux-crypto → (nothing in-workspace)
+# Layer 0 today:  hux-network → hux-types → hux-crypto → (nothing in-workspace)
 #
 # Add a row to LAYERS as each new crate lands. Lower index = lower layer.
 # A crate may depend on any crate with a STRICTLY LOWER index, and on nothing else in-workspace.
@@ -15,6 +15,7 @@ cd "$(dirname "$0")/.."
 # Ordered low → high.
 LAYERS=(
   hux-crypto
+  hux-types
   hux-network
 )
 

@@ -24,6 +24,9 @@ declare -a RULES=(
   "libcrux_sha3|crates/hux-crypto/src/hash/shake.rs"
   "fips205|crates/hux-crypto/src/sig/slh_dsa.rs"
   "rand_core_06|crates/hux-crypto/src/sig/slh_dsa.rs"
+  # Not a cryptographic vendor, but the same rule for the same reason: one encoder (ADR-0011,
+  # ADR-0022). A direct postcard call is a second dialect waiting to happen.
+  "postcard|crates/hux-types/src/codec.rs"
 )
 
 fail=0

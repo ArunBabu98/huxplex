@@ -6,7 +6,7 @@
 //!
 //! See `docs/18-implementation-plan/00-workspace-migration.md`.
 
-use hux_crypto::{signature::Keypair, signaturescheme::SignatureSchemeId};
+use hux_crypto::{context::Network, signature::Keypair, signaturescheme::SignatureSchemeId};
 use hux_network::{
     message::{DhtEntry, GossipMessage},
     peer::PeerId,
@@ -90,7 +90,7 @@ fn test_dht_entry_cross_network_replay_fails() {
     assert!(entry.verify().unwrap());
 
     // Replay the mainnet record on testnet.
-    entry.network = "testnet".to_string();
+    entry.network = Network::Testnet;
     assert!(
         !entry.verify().unwrap(),
         "A mainnet DHT entry must not verify under the testnet context"
@@ -118,7 +118,8 @@ fn test_dht_entry_key_value_boundary_is_unambiguous() {
     let forged = DhtEntry {
         key: b"ab".to_vec(),
         value: b"cXY".to_vec(),
-        network: honest.network.clone(),
+        suite: honest.suite,
+        network: honest.network,
         sig: honest.sig.clone(),
         signer_pk: honest.signer_pk.clone(),
     };
@@ -145,7 +146,8 @@ fn test_dht_entry_empty_key_and_empty_value_are_distinguishable() {
     let swapped = DhtEntry {
         key: b"AB".to_vec(),
         value: Vec::new(),
-        network: empty_key.network.clone(),
+        suite: empty_key.suite,
+        network: empty_key.network,
         sig: empty_key.sig.clone(),
         signer_pk: empty_key.signer_pk.clone(),
     };

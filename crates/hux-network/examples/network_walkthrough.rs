@@ -16,7 +16,7 @@
 //!
 //! See `docs/19-verification/02-network.md`.
 
-use hux_crypto::{signature::Keypair, signaturescheme::SignatureSchemeId};
+use hux_crypto::{context::Network, signature::Keypair, signaturescheme::SignatureSchemeId};
 use hux_network::{
     message::{DhtEntry, GossipMessage},
     peer::PeerId,
@@ -108,7 +108,7 @@ fn main() {
         b"intent".to_vec(),
     )
     .unwrap();
-    replayed.network = "testnet".to_string();
+    replayed.network = Network::Testnet;
     assert!(!replayed.verify().unwrap());
     ok("a mainnet gossip message cannot be replayed on testnet");
 
@@ -120,7 +120,7 @@ fn main() {
     )
     .unwrap();
     assert!(dht_replay.verify().unwrap());
-    dht_replay.network = "testnet".to_string();
+    dht_replay.network = Network::Testnet;
     assert!(!dht_replay.verify().unwrap());
     ok("nor can a mainnet DHT record");
     println!("     (this one was untestable until 2026-09-22 — the DHT context was");
