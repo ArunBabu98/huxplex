@@ -48,6 +48,7 @@ libcrux-ml-kem = { workspace = true, features = ["simd128"] }
 # committed vector makes the fixtures FIPS output rather than one vendor's history. Dev-only —
 # never a runtime dependency, never reachable from the library.
 [dev-dependencies]
+aws-lc-rs = "1.18.1"
 ml-dsa = "0.1.1"
 ml-kem = "0.3.2"
 # Differential oracle for SLH-DSA (G1 · C8).
