@@ -5,6 +5,11 @@ use libcrux_ml_kem::{
 };
 use sha2::Sha256;
 
+use crate::{
+    error::{CryptoError, CryptoResult},
+    traits::{Kem, KemSizes},
+};
+
 pub const EK_SIZE: usize = 1184;
 pub const DK_SIZE: usize = 2400;
 pub const CT_SIZE: usize = 1088;
@@ -66,4 +71,48 @@ pub fn kem768_derive_session_key(
         .expect("32 bytes is a valid length for HKDF-SHA256");
 
     okm
+}
+
+/// ML-KEM-768 behind the [`Kem`] trait. The free functions above stay as the fixed-size API.
+pub struct MlKem768;
+
+fn fixed<const N: usize>(bytes: &[u8]) -> CryptoResult<[u8; N]> {
+    bytes.try_into().map_err(|_| CryptoError::InvalidKeyLength {
+        expected: N,
+        actual: bytes.len(),
+    })
+}
+
+impl Kem for MlKem768 {
+    fn sizes(&self) -> KemSizes {
+        KemSizes {
+            encapsulation_key: EK_SIZE,
+            decapsulation_key: DK_SIZE,
+            ciphertext: CT_SIZE,
+            shared_secret: 32,
+            keygen_seed: 64,
+            encaps_randomness: 32,
+        }
+    }
+
+    fn generate(&self, seed: &[u8]) -> CryptoResult<(Vec<u8>, Vec<u8>)> {
+        let (ek, dk) = kem768_keygen(fixed(seed)?);
+        Ok((ek.to_vec(), dk.to_vec()))
+    }
+
+    fn encapsulate_derand(
+        &self,
+        encapsulation_key: &[u8],
+        randomness: &[u8],
+    ) -> CryptoResult<(Vec<u8>, [u8; 32])> {
+        let (ct, ss) = kem768_encapsulate(fixed(encapsulation_key)?, fixed(randomness)?);
+        Ok((ct.to_vec(), ss))
+    }
+
+    fn decapsulate(&self, decapsulation_key: &[u8], ciphertext: &[u8]) -> CryptoResult<[u8; 32]> {
+        Ok(kem768_decapsulate(
+            fixed(decapsulation_key)?,
+            fixed(ciphertext)?,
+        ))
+    }
 }

@@ -12,25 +12,26 @@
 //! pairs stay verifiable forever*). Merging them would make "can verify" imply "can sign", and
 //! that implication is false for most of a chain's lifetime.
 //!
-//! **`Kem` and `Hasher` are deliberately not here yet.** The G1 plan lists them, but each has
-//! exactly one candidate implementation today (ML-KEM-768, SHAKE-256) and no second in prospect
-//! before G5. A trait written against one implementation encodes that implementation's shape and
-//! has to be redesigned when the second arrives; the encapsulation check already confines both
-//! vendor crates, which is the property C4 actually asks for. They land with the hybrid KEX and
-//! BLAKE3 respectively.
+//! **[`Kem`] landed with the hybrid KEX** (G1 task B5), once there were two implementations —
+//! ML-KEM-768 and X25519 + ML-KEM-768 — for its shape to be drawn from. **`Hasher` is still
+//! deliberately absent**: SHAKE-256 is its only implementation until BLAKE3 arrives at G2b, and a
+//! trait written against one implementation encodes that implementation's shape.
 
 use rand::Rng;
 use zeroize::Zeroizing;
 
 use crate::{
     error::CryptoResult,
-    suite::{SignatureSchemeId, SuiteError},
+    suite::{KemId, SignatureSchemeId, SuiteError},
 };
 
 /// Each scheme's trait implementation lives beside its primitive, so registering a scheme is
 /// its own module, a registry row and a dispatch arm below — never a size edit anywhere else
 /// (G1 task C6). Re-exported so `hux_crypto::traits::MlDsa44` keeps working.
-pub use crate::sig::{ml_dsa::MlDsa44, slh_dsa::SlhDsaShake128s};
+pub use crate::{
+    kem::{MlKem768, hybrid::X25519MlKem768},
+    sig::{ml_dsa::MlDsa44, slh_dsa::SlhDsaShake128s},
+};
 
 /// Byte lengths a scheme fixes. Sourced from the descriptor so no call site needs a literal
 /// (G1 task C6 — *"a second signature scheme can be registered without editing any size
@@ -153,4 +154,52 @@ pub fn verifier(scheme: SignatureSchemeId) -> Result<&'static dyn Verifier, Suit
         SignatureSchemeId::Dilithium2 => Ok(&MlDsa44),
         SignatureSchemeId::SlhDsa128s => Ok(&SlhDsaShake128s),
     }
+}
+
+/// Byte lengths a KEM fixes — the [`SchemeSizes`] of key agreement.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct KemSizes {
+    pub encapsulation_key: usize,
+    pub decapsulation_key: usize,
+    pub ciphertext: usize,
+    pub shared_secret: usize,
+    pub keygen_seed: usize,
+    pub encaps_randomness: usize,
+}
+
+/// Key encapsulation.
+///
+/// `encapsulate_derand` takes its randomness explicitly — FIPS 203's `Encaps_internal` shape,
+/// which is what KATs need. Unlike signing there is no fault-attack argument for sealing it, but
+/// reused randomness against one key *does* repeat the shared secret, so production callers use
+/// [`encapsulate`], which draws it from the system CSPRNG.
+pub trait Kem {
+    fn sizes(&self) -> KemSizes;
+
+    /// `(encapsulation_key, decapsulation_key)`, deterministic in `seed`.
+    fn generate(&self, seed: &[u8]) -> CryptoResult<(Vec<u8>, Vec<u8>)>;
+
+    /// `(ciphertext, shared_secret)`, deterministic in `randomness`.
+    fn encapsulate_derand(
+        &self,
+        encapsulation_key: &[u8],
+        randomness: &[u8],
+    ) -> CryptoResult<(Vec<u8>, [u8; 32])>;
+
+    fn decapsulate(&self, decapsulation_key: &[u8], ciphertext: &[u8]) -> CryptoResult<[u8; 32]>;
+}
+
+/// Resolves a KEM identifier to its implementation. Total: every registered KEM is implemented.
+pub fn kem(id: KemId) -> &'static dyn Kem {
+    match id {
+        KemId::MlKem768 => &MlKem768,
+        KemId::X25519MlKem768 => &X25519MlKem768,
+    }
+}
+
+/// Production encapsulation: randomness from the system CSPRNG, sized by the KEM's descriptor.
+pub fn encapsulate(kem: &dyn Kem, encapsulation_key: &[u8]) -> CryptoResult<(Vec<u8>, [u8; 32])> {
+    let mut randomness = Zeroizing::new(vec![0u8; kem.sizes().encaps_randomness]);
+    rand::rng().fill_bytes(&mut randomness);
+    kem.encapsulate_derand(encapsulation_key, &randomness)
 }

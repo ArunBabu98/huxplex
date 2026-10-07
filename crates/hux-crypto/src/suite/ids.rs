@@ -66,6 +66,8 @@ impl SignatureSchemeId {
 pub enum KemId {
     /// ML-KEM-768, FIPS 203.
     MlKem768 = 1,
+    /// X25519 + ML-KEM-768 hybrid (ADR-0002, `kem::hybrid`). Suite v1's key agreement.
+    X25519MlKem768 = 2,
 }
 
 impl KemId {
@@ -76,6 +78,7 @@ impl KemId {
     pub fn from_u16(raw: u16) -> Option<Self> {
         match raw {
             1 => Some(Self::MlKem768),
+            2 => Some(Self::X25519MlKem768),
             _ => None,
         }
     }
