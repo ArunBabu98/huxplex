@@ -32,6 +32,9 @@ pub mod sig {
 }
 pub mod hash;
 
+#[cfg(test)]
+mod kat_tests;
+
 // API contracts for primitives that are specified and test-covered but NOT yet implemented.
 // They are `#[cfg(test)]` so the conformance suites below type-check against a fixed
 // signature, while no `unimplemented!()` cryptography is reachable from the library's public

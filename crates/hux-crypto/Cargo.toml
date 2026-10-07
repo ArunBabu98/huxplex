@@ -33,3 +33,10 @@ libcrux-ml-kem = { workspace = true, features = ["simd256"] }
 
 [target.'cfg(target_arch = "aarch64")'.dependencies]
 libcrux-ml-kem = { workspace = true, features = ["simd128"] }
+
+# Independent oracles for the KAT fixtures (G1 · C10): a second codebase reproducing every
+# committed vector makes the fixtures FIPS output rather than one vendor's history. Dev-only —
+# never a runtime dependency, never reachable from the library.
+[dev-dependencies]
+ml-dsa = "0.1.1"
+ml-kem = "0.3.2"

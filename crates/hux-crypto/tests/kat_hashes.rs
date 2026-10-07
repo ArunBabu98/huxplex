@@ -21,8 +21,9 @@
 //! Both are exactly the kind of value that is easy to change by accident and impossible to change
 //! safely once a network exists.
 //!
-//! Remaining for full C10: ML-DSA-44 and ML-KEM-768 vectors (keygen is deterministic and could
-//! land now; *signature* vectors need C9), SLH-DSA-128s (C7), and BLAKE3 (G2b).
+//! The ML-DSA-44 and ML-KEM-768 vectors are in `tests/kat/` (`kat_ml_dsa_ml_kem.rs`,
+//! `kat_differential.rs`, and `src/kat_tests.rs` for the pinned-nonce signatures). BLAKE3 arrives
+//! with G2b.
 
 use hux_crypto::{hash::shake::shake256_32, kem::kem768_derive_session_key};
 
