@@ -47,6 +47,10 @@ pub enum Offence {
     CrossContextReplay,
     /// A DHT record that fails validation (bad signature, wrong key, wrong network).
     InvalidRecord,
+    /// GossipSub's own scoring has graylisted the peer: it now drops everything the peer sends,
+    /// so no further offence would ever reach this table. Bans outright — otherwise the peer is
+    /// silenced but never disconnected, and keeps a connection slot for as long as it likes.
+    GossipGraylisted,
 }
 
 impl Offence {
@@ -56,7 +60,13 @@ impl Offence {
         match self {
             Offence::Malformed => -20,
             Offence::InvalidSignature | Offence::CrossContextReplay | Offence::InvalidRecord => -30,
+            Offence::GossipGraylisted => -100,
         }
+    }
+
+    /// Whether this offence bans regardless of the accumulated score.
+    pub fn bans_outright(self) -> bool {
+        matches!(self, Offence::GossipGraylisted)
     }
 }
 
@@ -224,7 +234,7 @@ impl PeerTable {
             return Verdict::AlreadyBanned;
         }
         entry.score = entry.score.saturating_add(offence.penalty());
-        if entry.score <= policy.ban_threshold {
+        if entry.score <= policy.ban_threshold || offence.bans_outright() {
             let until = now + policy.ban_duration;
             entry.state = PeerState::Banned;
             entry.banned_until = Some(until);
@@ -438,5 +448,19 @@ mod tests {
         );
         assert!(table.may_process(&connected));
         assert!(table.is_banned(&banned));
+    }
+
+    #[test]
+    fn n11_a_gossipsub_graylisting_bans_whatever_the_score() {
+        let mut table = PeerTable::new(PeerPolicy {
+            ban_threshold: -1000,
+            ..PeerPolicy::default()
+        });
+        let p = peer(7);
+        table.identified(p);
+        assert!(matches!(
+            table.penalize(p, Offence::GossipGraylisted, Instant::now()),
+            Verdict::Banned { .. }
+        ));
     }
 }

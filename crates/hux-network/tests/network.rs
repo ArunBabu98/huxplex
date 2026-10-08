@@ -365,99 +365,144 @@ async fn g5_t3_a_flood_is_not_amplified_and_the_offender_is_banned() {
     assert!(eventually(Duration::from_secs(10), || fully_connected(&handles)).await);
     let seen = collect(vec![victim.1, bystander.1]);
 
-    let (mut swarm, attacker_id) = attacker(42);
-    swarm
-        .behaviour_mut()
-        .gossipsub
-        .subscribe(&IdentTopic::new("huxplex/intents"))
-        .unwrap();
-    let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
-    let attacker_log = run_attacker(swarm, rx);
-    tx.send(AttackerCommand::Dial(
-        handles[0].peer_id(),
-        handles[0].listen_addr(),
-    ))
-    .unwrap();
-    assert!(
-        eventually(Duration::from_secs(10), || {
-            let h = handles[0].clone();
-            async move { h.connected_peers().await.unwrap().contains(&attacker_id) }
-        })
-        .await,
-        "the attacker never connected"
-    );
-    tokio::time::sleep(Duration::from_secs(1)).await; // let it join the mesh
-
-    // Three kinds of garbage: undecodable bytes, a forged signature, and a valid message
-    // replayed onto a topic it was not signed for.
+    // One attacker per kind of garbage: undecodable bytes, a forged signature, and a valid message
+    // replayed onto a topic it was not signed for. One each, because GossipSub graylists a peer
+    // at its second invalid delivery and drops everything after — a single attacker cycling
+    // through kinds shows the victim only whichever two arrive first.
     let mut forged = gossip(43, GossipTopic::intents(), b"forged");
     forged.sig.bytes[0] ^= 0x01;
     let replayed = gossip(43, GossipTopic::shard_blocks(0), b"replayed onto intents");
-    for i in 0..30u32 {
-        let data = match i % 3 {
-            0 => format!("not an envelope {i}").into_bytes(),
-            1 => {
-                let mut m = forged.clone();
-                m.payload = format!("forged {i}").into_bytes();
-                m.encode()
-            }
-            _ => {
-                let mut m = replayed.clone();
-                m.payload = format!("replayed {i}").into_bytes();
-                m.encode()
-            }
-        };
-        tx.send(AttackerCommand::Publish("huxplex/intents".into(), data))
-            .unwrap();
-        tokio::time::sleep(Duration::from_millis(20)).await;
-    }
+    let garbage = |kind: Offence, i: u32| match kind {
+        Offence::Malformed => format!("not an envelope {i}").into_bytes(),
+        Offence::InvalidSignature => {
+            let mut m = forged.clone();
+            m.payload = format!("forged {i}").into_bytes();
+            m.encode()
+        }
+        _ => {
+            let mut m = replayed.clone();
+            m.payload = format!("replayed {i}").into_bytes();
+            m.encode()
+        }
+    };
 
-    // The victim bans the attacker and drops its connection.
-    let banned = eventually(Duration::from_secs(10), || {
-        let seen = seen[0].clone();
-        async move {
-            seen.lock()
+    for (seed, kind) in [
+        (42u8, Offence::Malformed),
+        (45, Offence::InvalidSignature),
+        (46, Offence::CrossContextReplay),
+    ] {
+        let (mut swarm, attacker_id) = attacker(seed);
+        swarm
+            .behaviour_mut()
+            .gossipsub
+            .subscribe(&IdentTopic::new("huxplex/intents"))
+            .unwrap();
+        let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+        let attacker_log = run_attacker(swarm, rx);
+        tx.send(AttackerCommand::Dial(
+            handles[0].peer_id(),
+            handles[0].listen_addr(),
+        ))
+        .unwrap();
+        assert!(
+            eventually(Duration::from_secs(10), || {
+                let h = handles[0].clone();
+                async move { h.connected_peers().await.unwrap().contains(&attacker_id) }
+            })
+            .await,
+            "{kind:?} attacker never connected"
+        );
+
+        // First prove the path: GossipSub publishes to nobody until the victim is in the
+        // attacker's mesh, and a fixed pause is only a guess at when that is — one second was not
+        // enough on a slow runner (CI run 37743273385, x86_64). Send until one arrives.
+        let rejected = || {
+            seen[0]
+                .lock()
                 .unwrap()
                 .iter()
-                .any(|e| matches!(e, NodeEvent::PeerBanned(p) if *p == attacker_id))
+                .filter(|e| matches!(e, NodeEvent::Rejected { from, .. } if *from == attacker_id))
+                .count()
+        };
+        let mut sent = 0u32;
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(20);
+        while rejected() == 0 && tokio::time::Instant::now() < deadline {
+            tx.send(AttackerCommand::Publish(
+                "huxplex/intents".into(),
+                garbage(kind, sent),
+            ))
+            .unwrap();
+            sent += 1;
+            tokio::time::sleep(Duration::from_millis(100)).await;
         }
-    })
-    .await;
-    assert!(banned, "the offender was never banned");
-    assert!(
-        eventually(Duration::from_secs(5), || {
-            let h = handles[0].clone();
-            async move { !h.connected_peers().await.unwrap().contains(&attacker_id) }
-        })
-        .await,
-        "a banned peer is still connected"
-    );
-    assert!(
-        attacker_log
+        assert!(
+            rejected() > 0,
+            "no {kind:?} message reached the victim in {sent} tries"
+        );
+
+        // Then a short burst, and silence. GossipSub graylists the attacker at its second invalid
+        // delivery and drops the rest unseen, so the node's own score stops short of a ban; an
+        // attacker that then goes quiet would stay connected forever unless the graylisting
+        // itself bans (`Offence::GossipGraylisted`). Flooding *until* banned would hide that — the
+        // graylist decays and lets more offences through.
+        for _ in 0..10 {
+            tx.send(AttackerCommand::Publish(
+                "huxplex/intents".into(),
+                garbage(kind, sent),
+            ))
+            .unwrap();
+            sent += 1;
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+        let is_banned = || {
+            let seen = seen[0].clone();
+            async move {
+                seen.lock()
+                    .unwrap()
+                    .iter()
+                    .any(|e| matches!(e, NodeEvent::PeerBanned(p) if *p == attacker_id))
+            }
+        };
+        assert!(
+            eventually(Duration::from_secs(10), is_banned).await,
+            "{kind:?} attacker never banned after {sent} messages"
+        );
+
+        // The victim drops its connection, and the attacker sees it closed.
+        assert!(
+            eventually(Duration::from_secs(5), || {
+                let h = handles[0].clone();
+                async move { !h.connected_peers().await.unwrap().contains(&attacker_id) }
+            })
+            .await,
+            "a banned {kind:?} attacker is still connected"
+        );
+        assert!(
+            eventually(Duration::from_secs(5), || {
+                let log = attacker_log.clone();
+                async move { log.lock().unwrap().iter().any(|l| l.starts_with("closed")) }
+            })
+            .await
+        );
+
+        // Its offence was recognised as itself, and as nothing else.
+        let offences: HashSet<_> = seen[0]
             .lock()
             .unwrap()
             .iter()
-            .any(|l| l.starts_with("closed"))
-    );
-
-    // Every kind of offence was recognised as itself.
-    let offences: HashSet<_> = seen[0]
-        .lock()
-        .unwrap()
-        .iter()
-        .filter_map(|e| match e {
-            NodeEvent::Rejected { from, offence } if *from == attacker_id => Some(*offence),
-            _ => None,
-        })
-        .collect();
-    for expected in [
-        Offence::Malformed,
-        Offence::InvalidSignature,
-        Offence::CrossContextReplay,
-    ] {
-        assert!(
-            offences.contains(&expected),
-            "{expected:?} was not recognised"
+            .filter_map(|e| match e {
+                NodeEvent::Rejected { from, offence }
+                    if *from == attacker_id && *offence != Offence::GossipGraylisted =>
+                {
+                    Some(*offence)
+                }
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            offences,
+            HashSet::from([kind]),
+            "{kind:?} was misclassified"
         );
     }
 

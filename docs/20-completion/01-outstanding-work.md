@@ -79,6 +79,7 @@ test, and every new test was **mutation-checked**: re-introducing the old behavi
 | R7 | **Offences by an already-banned peer re-banned it** — extending the ban and re-announcing `PeerBanned` for messages already in flight | low | `Verdict::AlreadyBanned`; the ban keeps its original expiry | `n11_an_offence_by_a_banned_peer_neither_extends_nor_repeats_the_ban` |
 | R8 | **G5-T7 swept 24 contexts, G1-T2 26** — "every registry context" meant two different sets | low | the same four topic shapes as G1-T2 | `g5_t7_tls_and_protocol_signatures_never_verify_as_each_other` |
 | R9 | **IPv6 untested** | low | — | `ipv6_two_nodes_authenticate_and_gossip_over_loopback` |
+| R11 | **A graylisted offender was silenced but never disconnected.** GossipSub's own scoring graylists a peer at its second invalid delivery (−100 × 2² × 0.5 = −200, past −80) and then drops its traffic *before* the node sees it, so the `PeerTable` score stops at −40…−60 and the −100 ban is never reached. An attacker that sends a short burst and goes quiet keeps its connection — and, with R5, a connection slot — indefinitely. G5-T3 passed only when several messages happened to be read before the first verdict landed; it **failed CI run [37743273385](https://github.com/ArunBabu98/huxplex/actions/runs/37743273385) on x86_64** | medium | the node checks GossipSub's score as it reports each rejection, and a graylisting bans (`Offence::GossipGraylisted`). A 1 s poll was tried first and missed the window (≤ one decay interval) under load | G5-T3 rewritten: one attacker per offence kind, each bursting and then going quiet; each must be recognised as exactly its kind, banned and disconnected. Without the fix: **3/3 failures**; with it **0/15** |
 | R10 | **The G5 exit test raced Kademlia.** It sampled routing tables the instant connections completed; a peer enters the table only after confirming the protocol on a stream. **This is what failed CI run [37741299344](https://github.com/ArunBabu98/huxplex/actions/runs/37741299344)** on x86_64 and macOS (3 entries, not 4) | test | wait for the routing tables, as for the connections | the exit test |
 
 ### Recorded as acceptable, with the reason
@@ -98,8 +99,11 @@ test, and every new test was **mutation-checked**: re-introducing the old behavi
 ### Measured, not assumed
 
 - **Flake rate.** `cargo test --all-targets --all-features --locked`, 6 runs at `d70bb9f` and 5 at
-  `ba1e5fb`, arm64: **0 failures in 11 runs.** The one CI failure (R10) did not reproduce locally
-  in 6 runs; it needed a slower runner.
+  `ba1e5fb`, arm64: **0 failures in 11 runs** — yet CI failed twice, once each on R10 and R11.
+  Neither reproduced locally until the test was made to look for it: R11's G5-T3 failed locally
+  **5 times in 12** once an intermediate rewrite removed the batching luck that hid it. *Local
+  green is weak evidence for the network tests*; the CI matrix is the evidence. After the R11
+  fix: `tests/network.rs` **0 failures in 30 runs** (2 × 15).
 - **G5-T6 margin**, 15 runs of `cargo test -p hux-network --test transport g5_t6 -- --nocapture`:
   client flight **2,744 B** every run, budget **8,232 B**, margin **147–161 B** (median 154 B).
 

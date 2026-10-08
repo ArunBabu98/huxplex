@@ -30,6 +30,7 @@
 //! | Dials driven by discovery | only while fewer than [`NodeConfig::target_peers`] are connected |
 //! | Events awaiting the application | [`NodeConfig::event_buffer`]; beyond it events are **dropped**, never queued |
 //! | The peer table | disconnected peers forgotten after `PeerPolicy::forget_after` |
+//! | A peer GossipSub has graylisted | banned and disconnected at once, not left connected and silenced |
 //! | Dial configs, accepted connections | see `transport::quic` and `transport::p2p` |
 //!
 //! The command channel is unbounded: only the local application can write to it.
@@ -374,6 +375,13 @@ fn gossipsub_behaviour(
     // GossipSub's own scoring, beside the Huxplex penalties in `PeerTable`: an invalid message
     // costs the delivering peer heavily. Mesh-delivery-rate penalties are off — an honest node on
     // a quiet topic must not be penalised for silence.
+    //
+    // The two layers meet at the graylist. With these weights a second invalid delivery takes the
+    // peer to −100 × 2² × 0.5 = −200, past the −80 graylist threshold, after which GossipSub
+    // drops its traffic before the node ever sees it — so the `PeerTable` score stops moving.
+    // `Driver::gossip_event` turns a graylisting into a ban (`Offence::GossipGraylisted`), so a silenced
+    // peer is also disconnected. Honest peers never get there: they validate before forwarding,
+    // and QUIC rules out corruption in transit.
     let mut params = PeerScoreParams::default();
     for topic in topics {
         let topic_params = TopicScoreParams {
@@ -388,9 +396,14 @@ fn gossipsub_behaviour(
             .insert(IdentTopic::new(topic.as_str()).hash(), topic_params);
     }
     behaviour
-        .with_peer_score(params, PeerScoreThresholds::default())
+        .with_peer_score(params, gossip_thresholds())
         .map_err(|e| NodeError::Listen(e.to_string()))?;
     Ok(behaviour)
+}
+
+/// GossipSub's score thresholds — read again by `Driver::gossip_event` to catch a graylisting.
+fn gossip_thresholds() -> PeerScoreThresholds {
+    PeerScoreThresholds::default()
 }
 
 fn kad_behaviour(local: libp2p::PeerId, network: Network) -> kad::Behaviour<MemoryStore> {
@@ -599,6 +612,15 @@ impl Driver {
 
     fn swarm_event(&mut self, event: SwarmEvent<BehaviourEvent>) {
         let now = Instant::now();
+        match &event {
+            SwarmEvent::ConnectionEstablished { peer_id, .. }
+            | SwarmEvent::ConnectionClosed { peer_id, .. } => eprintln!(
+                "DBG {} conn event {:?}",
+                &self.swarm.local_peer_id().to_string()[..12],
+                (peer_id.to_string(), std::mem::discriminant(&event))
+            ),
+            _ => {}
+        }
         match event {
             SwarmEvent::Dialing {
                 peer_id: Some(peer),
@@ -668,6 +690,12 @@ impl Driver {
                 let Some(source) = PeerId::from_libp2p(&propagation_source) else {
                     return;
                 };
+                eprintln!(
+                    "DBG gossip from {} state {:?} topic {}",
+                    &source.to_hex()[..8],
+                    self.peers.state(&source),
+                    message.topic
+                );
                 let (acceptance, verdict) = if !self.peers.may_process(&source) {
                     (MessageAcceptance::Ignore, None)
                 } else {
@@ -686,7 +714,22 @@ impl Driver {
                         message,
                         propagated_by: source,
                     }),
-                    Some(Err(offence)) => self.penalize(source, offence),
+                    Some(Err(offence)) => {
+                        self.penalize(source, offence);
+                        // The rejection just reported has updated GossipSub's score. If it has
+                        // crossed the graylist, nothing more from this peer will reach the node
+                        // — ban now. (Polling for it misses the window: with two deliveries the
+                        // score is past the graylist for at most one decay interval.)
+                        let graylisted = self
+                            .swarm
+                            .behaviour()
+                            .gossipsub
+                            .peer_score(&propagation_source)
+                            .is_some_and(|score| score <= gossip_thresholds().graylist_threshold);
+                        if graylisted && !self.peers.is_banned(&source) {
+                            self.penalize(source, Offence::GossipGraylisted);
+                        }
+                    }
                     None => {}
                 }
             }
