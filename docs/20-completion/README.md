@@ -9,35 +9,44 @@
 > the gates *are*) and [`18-implementation-plan/`](../18-implementation-plan/) (which says how
 > the open ones get built). This folder says only *where we actually are*.
 
-## The answer — 2026-10-07
+## The answer — 2026-10-08
 
-**Layer 0 is implemented, and every Layer-0 gate test passes — locally. It is not yet *closed*.**
-Standing rule #1 of [`16-action-plan.md`](../16-action-plan.md#4-standing-rules) is that *a gate
-is done when its high-concept tests pass in CI, not when the code is written*, and the branch
-carrying G1's remainder, G2a and G5 (`layer0/g1-remaining`) has not run in CI yet. One green CI
-run on the three-architecture matrix closes G1, G2a and G5 together.
+**Layer 0 is complete.** Standing rule #1 of [`16-action-plan.md`](../16-action-plan.md#4-standing-rules)
+is that *a gate is done when its high-concept tests pass in CI, not when the code is written*.
+G1, G2a and G5 passed in CI on 2026-10-08 — run [37746269760](https://github.com/ArunBabu98/huxplex/actions/runs/37746269760) on PR
+[#24](https://github.com/ArunBabu98/huxplex/pull/24) at `7433a79`, on all three architectures.
+
+It took three runs. The first two failed on **CI-only races in the network tests** (R10, R11 in
+[`01-outstanding-work.md`](01-outstanding-work.md#review-of-masterhead--2026-10-08)), and the
+second of them exposed a real defect — a GossipSub-graylisted attacker was never disconnected —
+not just a flaky test. Local runs had been green 11 times out of 11 throughout. That is the
+reason the rule says *in CI*.
 
 | Gate | Layer-0 scope | Status |
 |---|---|---|
 | **G0** · Repository health | workspace, portability, reproducibility, secret hygiene | 🟢 **CLOSED 2026-09-23** — green in CI on three architectures. **G0-7** (C-toolchain pin) now landed with G5: the reproducible job runs in a digest-pinned container and compares the AWS-LC rlib too |
-| **G1** · Crypto core + agility registry | `(role, version)` registry, SLH-DSA-128s, KATs, hybrid KEX | 🟩 **implemented, green locally** — C1–C11 and B5 done; G1-T1…T6 all green (T6's binding half via G2a) |
-| **G2a** · Wire encoding | canonical `Codec` + decode for `GossipMessage`, `DhtEntry`, carrying the descriptor | 🟩 **implemented, green locally** — G2-T1, T2, T4 (10⁶ random inputs) green; wire format frozen by golden vectors |
-| **G5** · Transport | libp2p/QUIC, ML-DSA TLS certificates, live DHT, GossipSub | 🟩 **implemented, green locally** — N0b–N11 done; G5-T1…T7 green; the 5-node exit test passes |
+| **G1** · Crypto core + agility registry | `(role, version)` registry, SLH-DSA-128s, KATs, hybrid KEX | 🟢 **CLOSED 2026-10-08** — C1–C11 and B5; G1-T1…T6 green on three architectures (T6's binding half via G2a) |
+| **G2a** · Wire encoding | canonical `Codec` + decode for `GossipMessage`, `DhtEntry`, carrying the descriptor | 🟢 **CLOSED 2026-10-08** — G2-T1, T2, T4 green; wire v1 frozen by golden vectors (`DhtEntry` re-cut with `seq` before the close) |
+| **G5** · Transport | libp2p/QUIC, ML-DSA TLS certificates, live DHT, GossipSub | 🟢 **CLOSED 2026-10-08** — N0b–N11; G5-T1…T7 and the 5-node exit test green on three architectures |
 
-> **What remains for Layer 0:** push the branch, open a PR, and have the CI matrix go green —
-> `x86_64`, `aarch64`, `arm64` — plus the new containerised reproducible-build job. Nothing else
-> is outstanding. The full record, including what the work *found*, is in
-> [`01-outstanding-work.md`](01-outstanding-work.md).
+> **Nothing remains for Layer 0.** PR #24 is green but **not merged**; merging it is the owner's
+> call. Next is **G2b** (consensus encoding): E1–E7 and E9 are built on branch
+> `g2b/consensus-encoding` — not yet pushed — and E8, the fuzz target in CI, is left.
 
 ## What was proven, and how
 
-Verified on **2026-10-07**, `aarch64-apple-darwin` (Apple M4), rustc 1.85.0:
+**In CI, 2026-10-08** — run [37746269760](https://github.com/ArunBabu98/huxplex/actions/runs/37746269760), `7433a79`: `uname -m` = `x86_64`, `aarch64`, `arm64`;
+**274 passed · 0 failed · 59 ignored** on each (the 271 below plus 3 doctests); the reproducible
+job ran in `rust:1.85.0-bookworm@sha256:0ff31c9f…` and found `libaws_lc_sys` and the three
+`libhux_*` rlibs byte-identical across two clean checkouts.
 
-- `./scripts/verify-layer0.sh` — **13 of 13 checks PASS**
+**Locally, 2026-10-08**, `aarch64-apple-darwin` (Apple M4), rustc 1.85.0:
+
+- `./scripts/verify-layer0.sh --full` — **14 of 14 checks PASS** (13 without `--full`)
 - `./scripts/check-reproducible.sh` — **byte-identical** `libhux_crypto`, `libhux_types`,
   `libhux_network` **and `libaws_lc_sys`** (AWS-LC's compiled C) from two independent clean copies
 - `cargo deny check advisories licenses bans sources` — **ok**
-- `cargo test --all-targets --all-features --locked` — **260 passed · 0 failed · 59 ignored**.
+- `cargo test --all-targets --all-features --locked` — **271 passed · 0 failed · 59 ignored**.
   Every remaining ignore is `GATE: G6+` (33) or `GATE: G10` (26) — none is Layer 0.
 
 ### Per gate
@@ -53,10 +62,10 @@ Verified on **2026-10-07**, `aarch64-apple-darwin` (Apple M4), rustc 1.85.0:
 | G2-T1 / T2 / T4 | `hux-network/tests/wire_encoding.rs` | round trip both ways; overlong varints, trailing bytes, unknown ids, mis-sized keys, every truncation refused; 10⁶ random + 2×10⁴ mutated inputs |
 | G5-T1 no downgrade | `hux-network/tests/transport.rs` | classical-only KEX, MITM cert, missing client cert, wrong ALPN — all refused in the handshake |
 | G5-T2 `PeerId` bound to key | `transport.rs`, `network.rs` | impostor with a copied certificate refused, both directions |
-| G5-T3 amplification bounded | `network.rs` | real attacker peer floods 30 bad messages; banned, disconnected, nothing forwarded |
+| G5-T3 amplification bounded | `network.rs` | one attacker per offence kind bursts then goes quiet; each recognised as its kind, banned, disconnected; nothing forwarded |
 | G5-T4 loss + partition | `network.rs` | 20% datagram loss, then a partition healed — all 5 nodes converge |
-| G5-T5 live DHT | `network.rs` | squatting, re-keying and cross-network records refused by every node |
-| G5-T6 3× amplification | `transport.rs` | **measured on the wire**: 2,744 B in → ≤ 8,232 B budget; first flight ≈ 8,080 B (≈ 150 B margin) |
+| G5-T5 live DHT | `network.rs` | squatting, re-keying, cross-network records **and replay of a superseded record** refused by every node |
+| G5-T6 3× amplification | `transport.rs` | **measured on the wire**: 2,744 B in → 8,232 B budget; margin **147–161 B** over 15 runs |
 | G5-T7 TLS ≠ protocol signatures | `transport.rs`, `hux-crypto/tests/ml_dsa_differential_aws_lc.rs` | every registry context, both directions; the TLS context pinned empty |
 | G5 exit | `network.rs` | 5 nodes discover via Kademlia, mutually authenticate, gossip, sustain sessions |
 
@@ -98,7 +107,7 @@ figure older than a few commits:
 
 ```bash
 ./scripts/verify-layer0.sh --full          # every check, including the two release builds
-cargo test --all-targets --all-features --locked   # the 260 / 59 counts
+cargo test --all-targets --all-features --locked   # the 271 / 59 counts
 cargo deny check advisories licenses bans sources
 gh run list --branch "$(git branch --show-current)"   # has CI actually run?
 ```

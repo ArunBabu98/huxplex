@@ -94,9 +94,9 @@ done
 printf '\n'
 if [[ "$failures" -eq 0 ]]; then
   printf '  %sAll %d checks passed on %s.%s\n' "$GREEN" "${#NAMES[@]}" "$(uname -m)" "$RESET"
-  printf '\n  %sEvery Layer-0 gate test passed — on THIS architecture.%s G0 is closed in CI;\n' "$YELLOW" "$RESET"
-  printf '  G1, G2a and G5 close only when the same tests pass on the CI matrix\n'
-  printf '  (x86_64, aarch64, arm64). Cross-architecture agreement is proven there, not here.\n'
+  printf '\n  %sEvery Layer-0 gate test passed — on THIS architecture.%s Layer 0 is closed in\n' "$YELLOW" "$RESET"
+  printf '  CI (G0 2026-09-23; G1, G2a, G5 2026-10-08, run 37746269760). Cross-architecture\n'
+  printf '  agreement is proven on the CI matrix (x86_64, aarch64, arm64), not here.\n'
   printf '  Status: docs/20-completion/   Build order: docs/18-implementation-plan/\n'
 else
   printf '  %s%d of %d checks FAILED.%s\n' "$RED" "$failures" "${#NAMES[@]}" "$RESET"

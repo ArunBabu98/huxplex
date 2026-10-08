@@ -57,8 +57,9 @@ finished.
 unlock each gate are in [`../18-implementation-plan/`](../18-implementation-plan/) and
 [`../16-action-plan.md`](../16-action-plan.md). For where the project actually stands against
 them — audited, with the commands behind every claim — see
-[`../20-completion/`](../20-completion/). As of 2026-10-07: **G0 closed in CI; G1, G2a and G5
-implemented, every gate test green locally, awaiting their CI run.** G2a — canonical encoding for
+[`../20-completion/`](../20-completion/). As of 2026-10-08: **all four have closed — G0 on
+2026-09-23, G1, G2a and G5 on 2026-10-08** (CI run [37746269760](https://github.com/ArunBabu98/huxplex/actions/runs/37746269760): 274 passed · 0 failed · 59 ignored on
+each of x86_64, aarch64, arm64). **Layer 0 is complete.** G2a — canonical encoding for
 the two wire types — joined the definition via
 [ADR-0022](../adr/0022-g2-split-wire-and-consensus-encoding.md).
 

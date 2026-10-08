@@ -7,6 +7,13 @@
 > Where this report and the blueprint disagree, this report is describing what happened and the
 > blueprint is describing what was intended.
 
+> ### ⏩ Update — 2026-10-08: Layer 0 complete
+>
+> **G1, G2a and G5 closed in CI** — run [37746269760](https://github.com/ArunBabu98/huxplex/actions/runs/37746269760),
+> x86_64 / aarch64 / arm64, 274 passed · 0 failed · 59 ignored per leg. With G0 (2026-09-23),
+> Layer 0 is complete. The pre-close review and its fixes are in
+> [`01-outstanding-work.md`](01-outstanding-work.md).
+>
 > ### ⏩ Update — 2026-10-07
 >
 > **Everything this audit found missing has since been built.** G1 (C6–C11, B5), G2a and G5 are

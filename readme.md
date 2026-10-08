@@ -17,8 +17,8 @@ artificial agent networks.
 # 🔍 Verify it yourself
 
 Huxplex is **building Layer 0**: a post-quantum cryptographic and networking substrate. Not a
-blockchain yet — there is no ledger, consensus or VM. Layer 0 itself is **implemented, with every
-gate test green locally, awaiting its CI run** ([audited status](docs/20-completion/)): the
+blockchain yet — there is no ledger, consensus or VM. Layer 0 itself is **complete — every gate
+closed in CI on x86_64, aarch64 and arm64, 2026-10-08** ([audited status](docs/20-completion/)): the
 agility registry, ML-DSA-44 / SLH-DSA-128s / hybrid ML-KEM, canonical wire encoding, and a QUIC
 transport authenticated by native ML-DSA TLS certificates. Checkable in a few minutes:
 

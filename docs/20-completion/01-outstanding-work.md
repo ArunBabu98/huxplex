@@ -1,6 +1,6 @@
 # 01 — Outstanding work: what must be completed and tested
 
-> **As of 2026-10-07, at the head of `layer0/g1-remaining`.** Originally written 2026-09-23 from
+> **As of 2026-10-08, at the head of `layer0/g1-remaining` — Layer 0 complete.** Originally written 2026-09-23 from
 > the audit in [`00-layer0-v1-completion-report.md`](00-layer0-v1-completion-report.md) as the
 > *complete* remaining path to "Layer 0 for v1 is done". **That path has now been walked end to
 > end.** Every task below is implemented and every Layer-0 gate test passes locally; what is left
@@ -24,7 +24,8 @@
 | 6′ | **C11** — libcrux ↔ aws-lc-rs ML-DSA differential | `f1449df` | ✅ also the crypto half of G5-T7 |
 | 7 | **G2a** — canonical `Codec`; `GossipMessage`, `DhtEntry` carry the descriptor | `be2ee69` | ✅ G2-T1/T2/T4 green; **G1-T6 complete**; wire v1 frozen |
 | 8 | **N0b, N1–N11** — the transport; **G0-7** | `6983ca2` | ✅ G5-T1…T7 green; 5-node exit test passes |
-| — | **CI green on the three-architecture matrix → G1, G2a, G5 close → Layer 0 complete** | | ⏳ **the only step left** |
+| 9 | Pre-close review: R1–R11 fixed | `ba1e5fb`, `7433a79` | ✅ see *Review* below |
+| — | **CI green on the three-architecture matrix → G1, G2a, G5 close → Layer 0 complete** | run [37746269760](https://github.com/ArunBabu98/huxplex/actions/runs/37746269760) | ✅ **2026-10-08** — third run; the first two failed on R10 and R11 |
 
 ✅ **[Issue #12](https://github.com/ArunBabu98/huxplex/issues/12) is closed** — the digest-stack
 upgrade landed 2026-09-30, proven byte-neutral by the hash KATs.
@@ -304,12 +305,12 @@ nothing has yet proved a *second* scheme can be registered without touching one.
 
 | ID | Property | Today |
 |---|---|---|
-| **G1-T1** | Algorithm rotation without state migration — register a second scheme, flip **one role's** default; old objects still verify, other roles untouched, zero state-structure changes | 🟢 **green locally** — a test-only suite v2 flips `QuorumCert` to SLH-DSA (`suite/registry.rs`) |
-| **G1-T2** | Cross-context replay fails — **exhaustive over every ordered pair** of registry contexts, including `dht:entry` | 🟢 **green locally** — 650 ordered pairs, enumerated from `hux_crypto::context` |
-| **G1-T3** | KAT byte-exactness on **both** architectures | 🟢 **green locally** (arm64) — needs the CI matrix for the "both architectures" half |
+| **G1-T1** | Algorithm rotation without state migration — register a second scheme, flip **one role's** default; old objects still verify, other roles untouched, zero state-structure changes | 🟢 **green in CI** — a test-only suite v2 flips `QuorumCert` to SLH-DSA (`suite/registry.rs`) |
+| **G1-T2** | Cross-context replay fails — **exhaustive over every ordered pair** of registry contexts, including `dht:entry` | 🟢 **green in CI** — 650 ordered pairs, enumerated from `hux_crypto::context` |
+| **G1-T3** | KAT byte-exactness on **both** architectures | 🟢 **green in CI** on x86_64, aarch64, arm64 (run 37746269760) |
 | **G1-T4** | Unknown algorithm ID — and unknown **role** — rejected, never ignored | 🟢 **green** — five tests |
-| **G1-T5** | Hybrid retains PQ security if the classical half is broken — force X25519 output to a constant, session keys still differ | 🟢 **green locally** — `kem/hybrid.rs` |
-| **G1-T6** | Role confusion rejected — every ordered pair of roles | 🟢 **green locally** — closed by G2a: the descriptor is signed (`wire_encoding.rs`) |
+| **G1-T5** | Hybrid retains PQ security if the classical half is broken — force X25519 output to a constant, session keys still differ | 🟢 **green in CI** — `kem/hybrid.rs` |
+| **G1-T6** | Role confusion rejected — every ordered pair of roles | 🟢 **green in CI** — closed by G2a: the descriptor is signed (`wire_encoding.rs`) |
 
 > **G1-T6 closed through G2a**, as ADR-0022 anticipated: the descriptor is the first field of
 > every wire envelope and inside the signed preimage, so a relabelled role is refused as
@@ -437,7 +438,7 @@ itself. Under `libp2p-quic` it would not be — recorded as a standing condition
 > **Do not** build erasure-coded block broadcast at this gate. v1 may carry blocks over GossipSub;
 > the guardrail is only that nothing above the transport may *assume* it (**R5**).
 
-### G5 gate tests — all written, all green locally
+### G5 gate tests — all green in CI (run 37746269760)
 
 | ID | Property | Today |
 |---|---|---|

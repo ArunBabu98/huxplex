@@ -10,6 +10,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Layer 0 complete — 2026-10-08
+**G1, G2a and G5 closed**, green on the three-architecture CI matrix (run [37746269760](https://github.com/ArunBabu98/huxplex/actions/runs/37746269760): x86_64, aarch64,
+arm64, 274 passed · 0 failed · 59 ignored per leg). With G0 (2026-09-23), Layer 0 as defined by
+[ADR-0022](docs/adr/0022-g2-split-wire-and-consensus-encoding.md) is complete.
+
+### Fixed — from the pre-close review (docs/20-completion/01-outstanding-work.md, R1–R11)
+- **DHT rollback (G5-T5):** a publisher's old, genuinely signed record could be replayed over its
+  newer one. `DhtEntry` gains a signed `seq`; the v1 wire golden vector was re-cut before G2a closed.
+- **A GossipSub-graylisted offender stayed connected.** Graylisting now bans and disconnects.
+- **Muxer panic** on re-polling a closed connection; **`remove_listener` killed outbound
+  connections**; an undrained accept queue on dial-only endpoints.
+- **Resource bounds** against hostile peers: connection limits, discovery-dial target, bounded
+  events (dropped when full), forgotten idle peers, capped dial-config cache, bounded accept hand-off.
+- Two CI-only test races (G5 exit routing tables; G5-T3 mesh timing).
+
 ### Added
 - **The transport (G5)** — `hux-network`: QUIC (quinn) behind libp2p's `Transport` trait, TLS 1.3
   with **native ML-DSA-44 certificates** (`SignatureScheme` 0x0904), `X25519MLKEM768` as the only
