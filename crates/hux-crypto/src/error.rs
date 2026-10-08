@@ -31,6 +31,15 @@ pub enum CryptoError {
     #[error("Signing failed: {0}")]
     SigningFailed(String),
 
+    /// A network name outside the registry (`hux_crypto::context::Network`). Fails closed: a
+    /// context string for an unregistered network is a context no verifier recognises.
+    #[error("unregistered network: {0:?}")]
+    UnknownNetwork(String),
+
+    /// A key-agreement input was well-formed but unusable — e.g. a low-order X25519 point.
+    #[error("Key agreement failed: {0}")]
+    KeyAgreementFailed(String),
+
     /// A registry failure: unknown `(role, version)`, an unimplemented scheme, or a role /
     /// version confusion. Kept as its own variant so a registry rejection is never flattened
     /// into a generic verification failure — the distinction is what makes G1-T4 and G1-T6

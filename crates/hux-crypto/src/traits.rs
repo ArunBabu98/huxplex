@@ -12,17 +12,25 @@
 //! pairs stay verifiable forever*). Merging them would make "can verify" imply "can sign", and
 //! that implication is false for most of a chain's lifetime.
 //!
-//! **`Kem` and `Hasher` are deliberately not here yet.** The G1 plan lists them, but each has
-//! exactly one candidate implementation today (ML-KEM-768, SHAKE-256) and no second in prospect
-//! before G5. A trait written against one implementation encodes that implementation's shape and
-//! has to be redesigned when the second arrives; the encapsulation check already confines both
-//! vendor crates, which is the property C4 actually asks for. They land with the hybrid KEX and
-//! BLAKE3 respectively.
+//! **[`Kem`] landed with the hybrid KEX** (G1 task B5), once there were two implementations —
+//! ML-KEM-768 and X25519 + ML-KEM-768 — for its shape to be drawn from. **`Hasher` is still
+//! deliberately absent**: SHAKE-256 is its only implementation until BLAKE3 arrives at G2b, and a
+//! trait written against one implementation encodes that implementation's shape.
+
+use rand::Rng;
+use zeroize::Zeroizing;
 
 use crate::{
-    error::{CryptoError, CryptoResult},
-    sig::ml_dsa,
-    suite::{SignatureSchemeId, SuiteError},
+    error::CryptoResult,
+    suite::{KemId, SignatureSchemeId, SuiteError},
+};
+
+/// Each scheme's trait implementation lives beside its primitive, so registering a scheme is
+/// its own module, a registry row and a dispatch arm below — never a size edit anywhere else
+/// (G1 task C6). Re-exported so `hux_crypto::traits::MlDsa44` keeps working.
+pub use crate::{
+    kem::{MlKem768, hybrid::X25519MlKem768},
+    sig::{ml_dsa::MlDsa44, slh_dsa::SlhDsaShake128s},
 };
 
 /// Byte lengths a scheme fixes. Sourced from the descriptor so no call site needs a literal
@@ -34,6 +42,50 @@ pub struct SchemeSizes {
     pub secret_key: usize,
     pub signature: usize,
     pub seed: usize,
+    /// Per-signature randomness the scheme consumes (hedged signing). The signing path reads
+    /// this rather than naming a constant, so a scheme with a different nonce length — SLH-DSA's
+    /// `opt_rand` is `n` bytes, ML-DSA's `rnd` is 32 — needs no edit outside its own module.
+    pub signing_randomness: usize,
+}
+
+/// Per-signature randomness for hedged signing.
+///
+/// **Constructible only inside `hux-crypto`.** Production code obtains it from the system CSPRNG
+/// via the signing path; the explicit-bytes constructor exists only under `cfg(test)`, for the
+/// byte-exact signature KATs. Two constructors, not one with a flag — a `deterministic: bool` is
+/// a downgrade switch waiting for a misconfiguration, and deterministic lattice signing plus fault
+/// injection is a demonstrated key-recovery path (eprint 2025/2009).
+///
+/// Neither constructor is reachable from outside the crate:
+///
+/// ```compile_fail
+/// let _ = hux_crypto::traits::SigningRandomness::from_system_rng(32);
+/// ```
+///
+/// ```compile_fail
+/// let _ = hux_crypto::traits::SigningRandomness::explicit(&[0u8; 32]);
+/// ```
+pub struct SigningRandomness(Zeroizing<Vec<u8>>);
+
+impl SigningRandomness {
+    /// `len` fresh bytes from the system CSPRNG. The production constructor.
+    pub(crate) fn from_system_rng(len: usize) -> Self {
+        let mut bytes = Zeroizing::new(vec![0u8; len]);
+        rand::rng().fill_bytes(&mut bytes);
+        Self(bytes)
+    }
+
+    /// Caller-chosen bytes. **Test-only** — compiled out of every non-test build, so it cannot
+    /// reach production signing by any route.
+    #[cfg(test)]
+    pub(crate) fn explicit(bytes: &[u8]) -> Self {
+        Self(Zeroizing::new(bytes.to_vec()))
+    }
+
+    /// Read access for scheme implementations.
+    pub fn as_bytes(&self) -> &[u8] {
+        &self.0
+    }
 }
 
 /// Verification, and the sizes needed to check inputs before attempting it.
@@ -57,15 +109,18 @@ pub trait Verifier {
 pub trait Signer {
     fn generate(&self, seed: &[u8]) -> CryptoResult<(Vec<u8>, Vec<u8>)>;
 
-    /// `randomness` is a parameter so the caller decides its source. Production callers MUST pass
-    /// system CSPRNG output; G1 task C9 splits the public entry points so a caller-supplied value
-    /// cannot reach production signing.
+    /// Signs with the supplied per-signature randomness.
+    ///
+    /// The parameter is a [`SigningRandomness`], which **only this crate can construct** — from
+    /// the system CSPRNG in production, or from explicit bytes in this crate's own tests. So the
+    /// trait can be public (a downstream crate may implement a scheme) without being a path by
+    /// which a caller chooses the nonce (G1 task C9, crypto spec §3).
     fn sign(
         &self,
         secret_key: &[u8],
         message: &[u8],
         context: &[u8],
-        randomness: &[u8],
+        randomness: &SigningRandomness,
     ) -> CryptoResult<Vec<u8>>;
 }
 
@@ -75,71 +130,18 @@ pub trait SignatureScheme: Signer + Verifier {}
 
 impl<T: Signer + Verifier> SignatureScheme for T {}
 
-/// ML-DSA-44 (FIPS 204).
-pub struct MlDsa44;
-
-impl Verifier for MlDsa44 {
-    fn sizes(&self) -> SchemeSizes {
-        SchemeSizes {
-            public_key: ml_dsa::PK_LEN,
-            secret_key: ml_dsa::SK_LEN,
-            signature: ml_dsa::SIG_LEN,
-            seed: ml_dsa::SEED_LEN,
-        }
-    }
-
-    fn verify(
-        &self,
-        public_key: &[u8],
-        message: &[u8],
-        context: &[u8],
-        signature: &[u8],
-    ) -> CryptoResult<bool> {
-        ml_dsa::verify(public_key, message, context, signature)
-    }
-}
-
-impl Signer for MlDsa44 {
-    fn generate(&self, seed: &[u8]) -> CryptoResult<(Vec<u8>, Vec<u8>)> {
-        let seed: [u8; ml_dsa::SEED_LEN] =
-            seed.try_into().map_err(|_| CryptoError::InvalidKeyLength {
-                expected: ml_dsa::SEED_LEN,
-                actual: seed.len(),
-            })?;
-        Ok(ml_dsa::generate(seed))
-    }
-
-    fn sign(
-        &self,
-        secret_key: &[u8],
-        message: &[u8],
-        context: &[u8],
-        randomness: &[u8],
-    ) -> CryptoResult<Vec<u8>> {
-        let randomness: [u8; ml_dsa::SIGNING_RANDOMNESS_LEN] =
-            randomness
-                .try_into()
-                .map_err(|_| CryptoError::InvalidKeyLength {
-                    expected: ml_dsa::SIGNING_RANDOMNESS_LEN,
-                    actual: randomness.len(),
-                })?;
-        ml_dsa::sign(secret_key, message, context, randomness)
-    }
-}
-
 /// Resolves an identifier to its implementation.
 ///
-/// Returns [`SuiteError::SchemeUnimplemented`] for a scheme that is registered but not built yet
-/// — suite v1 resolves `Identity` and `Governance` to SLH-DSA-128s, which arrives at G1 task C7.
-/// That is a *distinct* error from an unknown identifier, and neither ever falls back to a
-/// working scheme: silently substituting a hot-path primitive for a root-of-trust one is the
-/// downgrade this registry exists to prevent.
+/// Every scheme suite v1 names is implemented. A scheme registered ahead of its implementation
+/// would resolve to [`SuiteError::SchemeUnimplemented`] — a *distinct* error from an unknown
+/// identifier, and never a fallback to a working scheme: silently substituting a hot-path
+/// primitive for a root-of-trust one is the downgrade this registry exists to prevent.
 pub fn implementation(
     scheme: SignatureSchemeId,
 ) -> Result<&'static dyn SignatureScheme, SuiteError> {
     match scheme {
         SignatureSchemeId::Dilithium2 => Ok(&MlDsa44),
-        SignatureSchemeId::SlhDsa128s => Err(SuiteError::SchemeUnimplemented { scheme }),
+        SignatureSchemeId::SlhDsa128s => Ok(&SlhDsaShake128s),
     }
 }
 
@@ -150,6 +152,54 @@ pub fn implementation(
 pub fn verifier(scheme: SignatureSchemeId) -> Result<&'static dyn Verifier, SuiteError> {
     match scheme {
         SignatureSchemeId::Dilithium2 => Ok(&MlDsa44),
-        SignatureSchemeId::SlhDsa128s => Err(SuiteError::SchemeUnimplemented { scheme }),
+        SignatureSchemeId::SlhDsa128s => Ok(&SlhDsaShake128s),
     }
+}
+
+/// Byte lengths a KEM fixes — the [`SchemeSizes`] of key agreement.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct KemSizes {
+    pub encapsulation_key: usize,
+    pub decapsulation_key: usize,
+    pub ciphertext: usize,
+    pub shared_secret: usize,
+    pub keygen_seed: usize,
+    pub encaps_randomness: usize,
+}
+
+/// Key encapsulation.
+///
+/// `encapsulate_derand` takes its randomness explicitly — FIPS 203's `Encaps_internal` shape,
+/// which is what KATs need. Unlike signing there is no fault-attack argument for sealing it, but
+/// reused randomness against one key *does* repeat the shared secret, so production callers use
+/// [`encapsulate`], which draws it from the system CSPRNG.
+pub trait Kem {
+    fn sizes(&self) -> KemSizes;
+
+    /// `(encapsulation_key, decapsulation_key)`, deterministic in `seed`.
+    fn generate(&self, seed: &[u8]) -> CryptoResult<(Vec<u8>, Vec<u8>)>;
+
+    /// `(ciphertext, shared_secret)`, deterministic in `randomness`.
+    fn encapsulate_derand(
+        &self,
+        encapsulation_key: &[u8],
+        randomness: &[u8],
+    ) -> CryptoResult<(Vec<u8>, [u8; 32])>;
+
+    fn decapsulate(&self, decapsulation_key: &[u8], ciphertext: &[u8]) -> CryptoResult<[u8; 32]>;
+}
+
+/// Resolves a KEM identifier to its implementation. Total: every registered KEM is implemented.
+pub fn kem(id: KemId) -> &'static dyn Kem {
+    match id {
+        KemId::MlKem768 => &MlKem768,
+        KemId::X25519MlKem768 => &X25519MlKem768,
+    }
+}
+
+/// Production encapsulation: randomness from the system CSPRNG, sized by the KEM's descriptor.
+pub fn encapsulate(kem: &dyn Kem, encapsulation_key: &[u8]) -> CryptoResult<(Vec<u8>, [u8; 32])> {
+    let mut randomness = Zeroizing::new(vec![0u8; kem.sizes().encaps_randomness]);
+    rand::rng().fill_bytes(&mut randomness);
+    kem.encapsulate_derand(encapsulation_key, &randomness)
 }

@@ -94,11 +94,9 @@ done
 printf '\n'
 if [[ "$failures" -eq 0 ]]; then
   printf '  %sAll %d checks passed on %s.%s\n' "$GREEN" "${#NAMES[@]}" "$(uname -m)" "$RESET"
-  printf '\n  %sLayer 0 is NOT complete.%s G0 is closed; G1 is part-built (registry + hash\n' "$YELLOW" "$RESET"
-  printf '  KATs in, SLH-DSA and the hybrid KEX not); G2a and G5 have not started.\n'
-  printf '  What you just verified is the primitive layer: signatures, KEM, derivation, domain\n'
-  printf '  separation, signed envelopes — on THIS architecture only. Cross-architecture\n'
-  printf '  agreement is proven by the CI matrix, not by this run.\n'
+  printf '\n  %sEvery Layer-0 gate test passed — on THIS architecture.%s Layer 0 is closed in\n' "$YELLOW" "$RESET"
+  printf '  CI (G0 2026-09-23; G1, G2a, G5 2026-10-08, run 37746269760). Cross-architecture\n'
+  printf '  agreement is proven on the CI matrix (x86_64, aarch64, arm64), not here.\n'
   printf '  Status: docs/20-completion/   Build order: docs/18-implementation-plan/\n'
 else
   printf '  %s%d of %d checks FAILED.%s\n' "$RED" "$failures" "${#NAMES[@]}" "$RESET"

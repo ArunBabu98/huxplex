@@ -72,8 +72,14 @@ build_at_canonical() {
   (cd "$CANONICAL" && cargo build --release --locked --quiet)
 }
 
+# The workspace's own rlibs, plus every dependency built from C. aws-lc-sys (G5, ADR-0019)
+# bundles AWS-LC's compiled objects into its rlib, so hashing it is what tests the C toolchain
+# — G0-7. A Rust-only comparison would pass while the C half drifted.
 hash_artifacts() {
-  find "$CANONICAL/target/release" -maxdepth 1 -name 'libhux_*.rlib' -print0 \
+  {
+    find "$CANONICAL/target/release" -maxdepth 1 -name 'libhux_*.rlib' -print0
+    find "$CANONICAL/target/release/deps" -maxdepth 1 -name 'libaws_lc_sys-*.rlib' -print0
+  } \
     | sort -z \
     | xargs -0 -I{} sh -c 'printf "%s  %s\n" "$(basename "$1")" "$(shasum -a 256 < "$1" | cut -d" " -f1)"' _ {}
 }

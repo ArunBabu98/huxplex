@@ -24,9 +24,9 @@ Verified by reading `src/` and running the test suite, not by reading docs.
 |---|---|
 | ~1,260 lines of implementation across `crates/hux-crypto/src/` and `crates/hux-network/src/`, plus ~2,270 lines of `#[cfg(test)]` API-contract modules for unimplemented primitives | `wc -l` over `src/`, excluding `lb_vrf`/`pq_ssle`/`slh_dsa`/`zk_stark` |
 | ~2,930 lines of **tests** in `crates/*/tests/`, plus the co-located gated suites inside the contract modules | `wc -l crates/*/tests/*.rs` |
-| **Build is green** — **140 passed, 0 failed, 81 ignored** on **three architectures**; reproducible release builds verified | `./scripts/verify-layer0.sh --full` locally (13/13), and the CI matrix on `x86_64` / `aarch64` / `arm64`. Walkthrough output is byte-identical across all three |
-| 81 ignored tests are conformance suites for four unimplemented primitives | `slh_dsa` 22 (G1), `lb_vrf` 17 + `pq_ssle` 16 (G6+), `zk_stark` 26 (G10) — each `#[ignore]` names its gate |
-| No ledger, no consensus, no VM, no storage, no transport, no tokens, no agents | absence across `crates/` |
+| **Build is green** — **271 passed, 0 failed, 59 ignored**, plus 3 doctests (2026-10-08) — on `x86_64`, `aarch64` and `arm64` in CI; reproducible builds verified in a digest-pinned container, AWS-LC's C included | CI run [37746269760](https://github.com/ArunBabu98/huxplex/actions/runs/37746269760) at `7433a79`, `uname -m` checked per leg (274 / 0 / 59 each, doctests included); `./scripts/verify-layer0.sh --full` locally (14/14) |
+| 59 ignored tests are conformance suites for three primitives outside Layer 0 | `lb_vrf` 17 + `pq_ssle` 16 (G6+), `zk_stark` 26 (G10) — each `#[ignore]` names its gate. SLH-DSA's 22 were un-ignored at G1 · C7 |
+| No ledger, no consensus, no VM, no storage, no tokens, no agents | absence across `crates/` — the transport now exists (G5) |
 | Connectors are now specified but unbuilt | [07-connector-protocol](15-specifications/07-connector-protocol.md), [ADR-0015](adr/0015-connector-architecture.md), [ADR-0016](adr/0016-evidence-and-attestation.md) |
 
 > **G0 was completed on 2026-09-12.** Previously `cargo test` did not compile at all
@@ -35,14 +35,12 @@ Verified by reading `src/` and running the test suite, not by reading docs.
 > what is now `crates/hux-crypto/src/kem/ml_kem.rs` — AVX2 is x86-64 only and does not exist on `aarch64`.
 > See G0 below for what changed and what remains.
 
-> **Where the project actually stands**, audited against this plan on 2026-09-23:
-> [`20-completion/`](20-completion/). Short version — **Layer 0 is roughly 35% complete**: G0
-> is **closed** (CI green on three architectures, with byte-identical derived values and a working
-> negative case). **G1 is in progress** — the agility registry (C1–C5) is built and mechanically
-> enforced; C6–C11 (sizes, SLH-DSA, the signing split, KATs, hybrid KEX) are open. **G5 has not
-> started**; its N0 spike is closed, the identity question is settled by [ADR-0021](adr/0021-peer-identity-across-libp2p.md),
-> and its entry condition is now **G2a** ([ADR-0022](adr/0022-g2-split-wire-and-consensus-encoding.md)),
-> which joins Layer 0.
+> **Where the project actually stands**, audited against this plan on 2026-10-08:
+> [`20-completion/`](20-completion/). Short version — **Layer 0 is complete.** G0 closed in CI
+> 2026-09-23. G1 (C1–C11, B5), G2a ([ADR-0022](adr/0022-g2-split-wire-and-consensus-encoding.md))
+> and G5 (N0b–N11, with [ADR-0021](adr/0021-peer-identity-across-libp2p.md)'s identity mechanism)
+> **closed 2026-10-08**, green on the three-architecture matrix (run [37746269760](https://github.com/ArunBabu98/huxplex/actions/runs/37746269760)). G2b — the consensus
+> encoding — is next.
 
 **Read this honestly:** the repository is a *spec-test-first* project. The founder has
 written extensive conformance tests ahead of the implementations — including full FIPS 205
@@ -174,7 +172,7 @@ and [`20-completion/01-outstanding-work.md`](20-completion/01-outstanding-work.m
 
 ---
 
-## G1 · Crypto core and the agility registry
+## G1 · Crypto core and the agility registry — 🟢 **CLOSED 2026-10-08**
 
 > The executive summary names crypto-agility as *"the top architectural priority, above any
 > single algorithm choice."* Build the registry **before** the algorithms, or every later
@@ -223,7 +221,7 @@ KATs committed; G1-T1 demonstrated in CI.
 
 ---
 
-## G2 · Canonical encoding and the data model — **split into G2a / G2b**
+## G2 · Canonical encoding and the data model — **split into G2a / G2b** · G2a 🟢 **CLOSED 2026-10-08**
 
 > Two nodes that serialize the same object differently will fork. This gate is small,
 > unglamorous, and load-bearing for everything after it.
@@ -322,7 +320,7 @@ functions; the TCHAO conflict-graph scheduler
 
 ---
 
-## G5 · Transport and the P2P layer
+## G5 · Transport and the P2P layer — 🟢 **CLOSED 2026-10-08**
 
 > Runs **in parallel** with G3/G4. Today `crates/hux-network/` defines message *types* only — there
 > is no swarm, no transport, no peer state machine.

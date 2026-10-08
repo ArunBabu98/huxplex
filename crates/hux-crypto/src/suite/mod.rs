@@ -113,6 +113,11 @@ const _: () = {
 pub enum SuiteVersion {
     /// Genesis suite. ML-DSA-44 for the hot roles, SLH-DSA-128s for the long-lived ones.
     V1 = 1,
+    /// A hypothetical next suite, **test builds only**, so G1-T1 can rotate one role through a
+    /// real second version. It has no row in the production table and does not parse from the
+    /// wire (`from_u16(2)` stays `None` outside tests — G1-T4).
+    #[cfg(test)]
+    V2 = 2,
 }
 
 impl SuiteVersion {
@@ -126,6 +131,8 @@ impl SuiteVersion {
     pub fn from_u16(raw: u16) -> Option<Self> {
         match raw {
             1 => Some(Self::V1),
+            #[cfg(test)]
+            2 => Some(Self::V2),
             _ => None,
         }
     }
@@ -165,10 +172,11 @@ pub enum SuiteError {
 
     /// The row exists and names a scheme this build does not implement yet.
     ///
-    /// Expected between gates: suite v1 resolves `Identity` and `Governance` to SLH-DSA-128s,
-    /// which arrives at G1 task C7. Distinct from [`Self::UnknownPair`] so "not built yet" can
-    /// never be mistaken for "not a valid algorithm", nor silently fall back to a hot-path scheme.
-    #[error("{scheme:?} is registered but not implemented in this build (G1 task C7)")]
+    /// A normal state *between* gates — a row can land before its primitive so the descriptor
+    /// shape is right (SLH-DSA-128s was registered this way until G1 task C7). Distinct from
+    /// [`Self::UnknownPair`] so "not built yet" can never be mistaken for "not a valid
+    /// algorithm", nor silently fall back to a hot-path scheme.
+    #[error("{scheme:?} is registered but not implemented in this build")]
     SchemeUnimplemented { scheme: SignatureSchemeId },
 
     /// A signature produced under one role was presented under another (**G1-T6**).

@@ -98,6 +98,16 @@ recovers hux  : true
 and the Huxplex `PeerId` is recoverable verbatim from bytes `[2..]`. The `0x12` variant was also
 tested and works; it is rejected here on semantics (I2), not capability.
 
+### Re-verified at implementation — 2026-10-07
+
+G5 was built on **`libp2p-identity` 0.2.14** (libp2p 0.56), not 0.3.0: 0.56 supports the pinned
+rustc 1.85, so the toolchain bump this ADR anticipated was not needed. The mechanism is identical
+— `PeerId::from_multihash` accepts identity-coded digests up to `MAX_INLINE_KEY_LENGTH = 42` — and
+is now tested rather than spot-checked: **I3** both directions over 16 keys
+(`i3_conversion_is_total_and_lossless_in_both_directions`), **I1** a sha2-coded `PeerId` refused,
+**I4** a compile-time assertion in `peer.rs`, and **I5** the transport deriving the swarm's
+`PeerId` only from the certificate the TLS verifier accepted.
+
 ## Consequences
 
 - ➕ **ADR-0012 rule 5 is met as written.** Peer identity stays post-quantum, self-certifying, and

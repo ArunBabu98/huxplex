@@ -290,6 +290,43 @@ and is now the *sole authority* for identity; see
 > 1.85.0. Both are G5-entry work and both feed the reproducible-build recipe; keep them separate
 > so a G0-T2 failure has one cause, not two.
 
+## Amendment — 2026-10-07: the first-flight budget, measured
+
+Implemented (G5). **G5-T6** measures the responder's pre-validation output on the wire, and it
+overturned the §"anti-amplification" estimate in [wire spec §2.6](../15-specifications/05-network-wire-protocol.md).
+
+| | Planned | Measured (1,350 B, 8-byte CIDs) | Adopted (1,372 B, 4-byte CIDs) |
+|---|---|---|---|
+| Client Initial (two datagrams) | ≈ 2,700 | 2,700 | 2,744 |
+| Budget (3×) | ≈ 8,100 | 8,100 | 8,232 |
+| Responder output before validation | ≈ 7,970 | **8,156 – 8,165** — over | ≈ 8,075 – 8,085 |
+| Margin | ≈ 130 | **negative** | ≈ 150 |
+
+Two things the estimate omitted: QUIC framing and AEAD tags across ~7 packets, and a **0.5-RTT
+`NEW_CONNECTION_ID` packet** quinn sends as soon as it holds 1-RTT keys — still inside the
+pre-validation window. And quinn, by design (quinn #1082), sends a **full datagram while any budget
+remains**, so a flight that does not fit with room to spare overshoots by up to one MTU.
+
+**Decided:**
+
+1. **Initial padding is 1,372 bytes** — the largest UDP payload that fits a 1,420-byte tunnel MTU
+   over IPv6 (40 + 8 + 1,372; WireGuard's default). It keeps the path-safety reason for the
+   conventional 1,350 while buying 132 B of budget.
+2. **Connection IDs are 4 bytes** — two per long-header packet, plus each new-ID frame. Zero-length
+   IDs would suppress the 0.5-RTT packet entirely but **cannot** be used: a node routinely holds
+   two connections to one remote socket (simultaneous dials), and zero-length IDs demultiplex by
+   address alone.
+3. The certificate is as small as X.509 allows — empty subject and issuer, serial `1`: 3,839 B.
+
+G5-T6 asserts both halves on every run: the responder never exceeds 3×, *and* the client begins
+its second flight while still unvalidated — proof the whole first flight fit in one round trip.
+
+> **For a future revision.** ≈ 150 B is the design's entire headroom; ML-DSA-65 or any extra
+> certificate content breaks it. The structural fix is **TLS raw public keys** (RFC 7250): the
+> identity *is* the key, so the X.509 wrapper and its self-signature — ≈ 2.5 KB of the flight —
+> prove nothing `CertificateVerify` does not. That would amend §1 of this ADR and is left to the
+> networking owner.
+
 ## Links
 - Amends [ADR-0012](0012-network-transport.md) rules 4 and 5 (does not supersede it — transport,
   discovery and messaging decisions stand)

@@ -1,9 +1,9 @@
 [workspace]
 resolver = "3"
-members = ["crates/hux-crypto", "crates/hux-network"]
+members = ["crates/hux-crypto", "crates/hux-types", "crates/hux-network"]
 
 # Crates depend downward only — see docs/10-development/repository-structure.md.
-# Current layering: hux-network → hux-crypto. A cycle is a build failure.
+# Current layering: hux-network → hux-types → hux-crypto. A cycle is a build failure.
 
 [workspace.package]
 version = "0.1.0"
@@ -41,5 +41,24 @@ rand = "0.10.0"
 zeroize = { version = "1.8", features = ["derive"] }
 subtle = "2.6"
 
+# Canonical encoding (ADR-0011): postcard behind `hux_types::codec::Codec`, the only place
+# allowed to name it. `alloc` only — no std I/O, no default features.
+postcard = { version = "1.1.3", default-features = false, features = ["alloc"] }
+serde = { version = "1.0.228", default-features = false, features = ["derive", "alloc"] }
+
 # Internal
 hux-crypto = { path = "crates/hux-crypto" }
+hux-types = { path = "crates/hux-types" }
+
+# SLH-DSA-128s signing is a few hundred hash-tree evaluations per signature; unoptimised it turns
+# the conformance suite from seconds into minutes. Optimising only the hash-based signature crates
+# and their Keccak in dev/test keeps `cargo test` usable. Release builds — and therefore the G0-T2
+# reproducibility comparison — are unaffected.
+[profile.dev.package.fips205]
+opt-level = 3
+[profile.dev.package.slh-dsa]
+opt-level = 3
+[profile.dev.package.sha3]
+opt-level = 3
+[profile.dev.package.keccak]
+opt-level = 3

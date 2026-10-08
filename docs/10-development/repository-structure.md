@@ -93,9 +93,11 @@ crypto/network crates exportable as standalone modules (v4 endgame).
 ## Migration from current → target (incremental)
 
 1. Convert the crate to a workspace; move `src/crypto` → `crates/hux-crypto`, `src/network` →
-   `crates/hux-network` (minimal churn — same code). ⬅️ **scheduled at G0** (decided 2026-09-22)
-2. Grow `hux-crypto` into the suite registry (agility). ⬅️ **G1**
-3. Add `hux-types`; then `hux-state`, `hux-vm`, `hux-consensus` per the Phase-1 plan. ⬅️ **G2+**
+   `crates/hux-network` (minimal churn — same code). ✅ **done at G0**
+2. Grow `hux-crypto` into the suite registry (agility). ✅ **done at G1**
+3. Add `hux-types`; then `hux-state`, `hux-vm`, `hux-consensus` per the Phase-1 plan. 🟦 **`hux-types`
+   added at G2a** (2026-10-07) with the canonical `Codec` and the wire forms of the crypto types;
+   the layering is now `hux-network → hux-types → hux-crypto`. The consensus types join it at G2b.
 4. Layer economy/identity/governance in Phases 2–3.
 
 No rewrite — the existing crypto/network code is the foundation, literally crate 0.

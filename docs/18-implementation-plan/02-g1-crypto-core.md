@@ -93,7 +93,7 @@ refactor current hard-coded sizes (`[u8;1312]`/`[u8;2420]`) behind the suite des
 
 | ID | Task | Acceptance |
 |---|---|---|
-| **C6** ⬜ | Sizes come from the suite descriptor. Current sites: `publickey.rs` (1312, 2420), `signature.rs` (2560) | A second signature scheme can be registered without editing any size literal |
+| **C6** ✅ | Sizes come from the suite descriptor. Current sites: `publickey.rs` (1312, 2420), `signature.rs` (2560) | A second signature scheme can be registered without editing any size literal |
 
 > ⚠️ This is the task most likely to be done shallowly. The test that catches a shallow job is
 > **G1-T1** — if registering a dummy V2 requires touching a size constant, C6 is not finished.
@@ -102,16 +102,16 @@ refactor current hard-coded sizes (`[u8;1312]`/`[u8;2420]`) behind the suite des
 
 | ID | Task | Acceptance |
 |---|---|---|
-| **C7** ⬜ | Implement `sig/slh_dsa.rs` on **`fips205`** (pure Rust, no `unsafe`, all 12 parameter sets) | The 24 `slh_dsa_128s_tests` pass with `#[ignore]` removed; sizes 32 / 64 / 7,856 hold |
-| **C8** ⬜ | CI **differential test** against RustCrypto `slh-dsa` — dev-dependency only, never a runtime dependency | Same seed ⇒ identical key and signature bytes; a deliberate mutation fails the test |
+| **C7** ✅ | Implement `sig/slh_dsa.rs` on **`fips205`** (pure Rust, no `unsafe`, all 12 parameter sets) | The 24 `slh_dsa_128s_tests` pass with `#[ignore]` removed; sizes 32 / 64 / 7,856 hold |
+| **C8** ✅ | CI **differential test** against RustCrypto `slh-dsa` — dev-dependency only, never a runtime dependency | Same seed ⇒ identical key and signature bytes; a deliberate mutation fails the test |
 
 ### D. Secret hygiene and KATs
 
 | ID | Task | Acceptance |
 |---|---|---|
-| **C9** ⬜ | Production signing sources randomness from the system CSPRNG and **cannot accept a caller-supplied value**; a separate test-only entry point takes explicit randomness ([crypto spec §3](../15-specifications/02-cryptography-spec.md)) | Two functions, not one with a flag. The test-only path is unreachable from the public API |
-| **C10** 🟦 | Byte-exact KAT fixtures for ML-DSA-44, ML-KEM-768, SLH-DSA-128s, and the hash domains — signature fixtures pin the 32-byte randomness | **G1-T3** on both architectures. **Hash domains ✅ done 2026-09-30** (`tests/kat_hashes.rs`: SHAKE-256 incl. the 1,312-byte ML-DSA key length, and HKDF-SHA-256 session keys). Remaining: ML-DSA-44 / ML-KEM-768 keygen (deterministic — could land now), signatures (need C9), SLH-DSA (C7), BLAKE3 (G2b) |
-| **C11** ⬜ | `libcrux` ↔ `aws-lc-rs` ML-DSA differential test ([ADR-0019](../adr/0019-transport-authentication.md) condition 4) | Same input ⇒ identical verification verdict; cross-verification of each other's signatures |
+| **C9** ✅ | Production signing sources randomness from the system CSPRNG and **cannot accept a caller-supplied value**; a separate test-only entry point takes explicit randomness ([crypto spec §3](../15-specifications/02-cryptography-spec.md)) | Two functions, not one with a flag. The test-only path is unreachable from the public API |
+| **C10** ✅ | Byte-exact KAT fixtures for ML-DSA-44, ML-KEM-768, SLH-DSA-128s, and the hash domains — signature fixtures pin the 32-byte randomness | **G1-T3** on both architectures. **Hash domains ✅ done 2026-09-30** (`tests/kat_hashes.rs`: SHAKE-256 incl. the 1,312-byte ML-DSA key length, and HKDF-SHA-256 session keys). Remaining: ML-DSA-44 / ML-KEM-768 keygen (deterministic — could land now), signatures (need C9), SLH-DSA (C7), BLAKE3 (G2b) |
+| **C11** ✅ | `libcrux` ↔ `aws-lc-rs` ML-DSA differential test ([ADR-0019](../adr/0019-transport-authentication.md) condition 4) | Same input ⇒ identical verification verdict; cross-verification of each other's signatures |
 
 > **Why C9 is phrased as "two functions, not one with a flag."** A `deterministic: bool` parameter
 > is a downgrade switch waiting for a misconfiguration, and deterministic lattice signing plus
@@ -131,16 +131,29 @@ refactor current hard-coded sizes (`[u8;1312]`/`[u8;2420]`) behind the suite des
 here** even though [ADR-0002](../adr/0002-cryptographic-parameter-set.md)'s review note prefers it
 over LB-VRF; that is a G6 decision and v1 uses classical-randomness leader selection.
 
+### B–D — as built (2026-10-07)
+
+| Task | Where | Note |
+|---|---|---|
+| C6 | `signature.rs`, `sig/*.rs` | `SchemeSizes` gained `signing_randomness`; keygen and signing read the scheme. A dummy scheme with foreign sizes proves no literal survives |
+| C7 | `sig/slh_dsa.rs` | **SLH-DSA-SHAKE-128s** on `fips205` (SHAKE: the identity hash domain). The 22 gated tests run through the registry and the production signing path |
+| C8 | `tests/slh_dsa_differential.rs` | RustCrypto `slh-dsa`: identical keys and pinned signatures; each verifies the other's production signatures; mutations rejected by both |
+| C9 | `traits.rs` (`SigningRandomness`) | Constructible only inside the crate; the explicit-bytes path is `cfg(test)`. Also closes the *trait* route — `Signer::sign` was public and took caller bytes |
+| C10 | `tests/kat/` | ML-DSA-44, ML-KEM-768, SLH-DSA, hybrid. Every vector reproduced by an independent implementation, not only by libcrux |
+| C11 | `tests/ml_dsa_differential_aws_lc.rs` | Identical keys, cross-verification, agreeing verdicts; and no protocol signature verifies on the TLS side (G5-T7's crypto half) |
+| B5 | `kem/hybrid.rs`, `kem/x25519.rs`, `traits::Kem` | TLS `X25519MLKEM768` layout; HKDF combiner binding the X25519 values; HACL* X25519 (`libcrux-curve25519`) |
+| — | `context.rs` | The crypto spec §5 registry as code — what made G1-T2 exhaustive rather than restated |
+
 ## 🎯 Gate tests
 
 | ID | Property | Note |
 |---|---|---|
-| **G1-T1** | **Algorithm rotation without state migration.** Register a second scheme, flip *one role's* default; old objects still verify, other roles untouched, zero state-structure changes | 🟡 **half green.** The descriptor half is proven (`g1_t1_descriptor_shape_supports_per_role_rotation`): resolution is per-`(role, version)`, and suite v1 *already* resolves `Identity` to a different primitive than the hot roles, so the table is genuinely per-role rather than one global default wearing a role label. The rotation half needs a second **implemented** scheme — it completes at C7 |
-| **G1-T2** | **Cross-context replay fails** — exhaustive over every ordered pair of registry contexts | 🟢 partly exists; extend to the full sweep including `dht:entry` now that it is network-parameterized |
-| **G1-T3** | **KAT byte-exactness** on both architectures | Signature fixtures must pin randomness (C9) |
+| **G1-T1** | **Algorithm rotation without state migration.** Register a second scheme, flip *one role's* default; old objects still verify, other roles untouched, zero state-structure changes | 🟢 **green** (2026-10-07) — `suite::registry::g1_t1_rotation`. *Before:* 🟡 **half green.** The descriptor half is proven (`g1_t1_descriptor_shape_supports_per_role_rotation`): resolution is per-`(role, version)`, and suite v1 *already* resolves `Identity` to a different primitive than the hot roles, so the table is genuinely per-role rather than one global default wearing a role label. The rotation half needs a second **implemented** scheme — it completes at C7 |
+| **G1-T2** | **Cross-context replay fails** — exhaustive over every ordered pair of registry contexts | 🟢 **green** — `tests/context_registry.rs`, 650 ordered pairs incl. `dht:entry` |
+| **G1-T3** | **KAT byte-exactness** on both architectures | 🟢 **green in CI** on x86_64, aarch64 and arm64 — run 37746269760, 2026-10-08 |
 | **G1-T4** | **Unknown algorithm ID is rejected, never ignored** — extend to unknown *role* | 🟢 **green** — five tests: unknown role, unknown version, unknown scheme, zero-is-never-valid, and consistent resolution across every registered pair |
-| **G1-T5** | **Hybrid handshake retains PQ security if the classical half is broken** | Force X25519 output to a constant; session keys still differ |
-| **G1-T6** | **Role confusion is rejected** — every ordered pair of roles | 🟡 **structural half green** — every ordered pair of roles is proven pairwise distinct in discriminant and key purpose, and `RoleMismatch` names both roles. Binding a *signature* to its role needs the descriptor on the signed object, which is G2's encoding work |
+| **G1-T5** | **Hybrid handshake retains PQ security if the classical half is broken** | 🟢 **green** — `kem::hybrid::g1_t5` |
+| **G1-T6** | **Role confusion is rejected** — every ordered pair of roles | 🟢 **green** via G2a — `hux-network/tests/wire_encoding.rs`. *Before:* 🟡 **structural half green** — every ordered pair of roles is proven pairwise distinct in discriminant and key purpose, and `RoleMismatch` names both roles. Binding a *signature* to its role needs the descriptor on the signed object, which is G2's encoding work |
 
 ## G1 exit
 

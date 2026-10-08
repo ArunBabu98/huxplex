@@ -23,6 +23,12 @@ is optional and neither is inferred from the object type.
 | `Governance` | Work Visa issuance, constitutional records, registry updates | **SLH-DSA-128s** | FIPS 205 | 1 |
 | `Transport` | TLS 1.3 certificate + `CertificateVerify` ([ADR-0019](../adr/0019-transport-authentication.md)); `PeerId` derives from this key | **ML-DSA-44**, TLS `SignatureScheme` **0x0904** | FIPS 204 | 1 |
 
+**SLH-DSA-128s is the SHAKE instantiation, SLH-DSA-SHAKE-128s.** ✅ *Decided 2026-10-07* (G1 · C7).
+FIPS 205 defines the 128s parameter set over SHA-2 and over SHAKE; SHAKE-256 is already the
+identity hash domain ([ADR-0010](../adr/0010-hash-function-domains.md)), so the root-of-trust
+signature rests on the same hash assumption as the identities it signs for. Implemented on
+`fips205`, cross-checked byte-for-byte against RustCrypto `slh-dsa` (C8).
+
 Rules:
 1. Roles are **added, never removed or renumbered.** An unknown role MUST fail closed with a
    distinct error (never be ignored, never fall back to a default).
@@ -43,9 +49,9 @@ Rules:
 | Identity / XOF hash | **SHAKE-256** | FIPS 202 |  <!-- impl: libcrux-sha3, see below -->
 | Bulk state / Merkle hash | **BLAKE3** (256-bit) | — |
 
-> ⚠️ Implemented today (🟢): ML-DSA-44, ML-KEM-768, HKDF-SHA-256, SHAKE-256, BIP32 derivation,
-> and the `(role, version)` registry. Specified but not yet in code (🟡): SLH-DSA-128s, the
-> X25519 hybrid leg, BLAKE3.
+> Implemented (🟢, 2026-10-07): ML-DSA-44, SLH-DSA-SHAKE-128s, ML-KEM-768, the X25519 +
+> ML-KEM-768 hybrid (§4.3), HKDF-SHA-256, SHAKE-256, BIP32 derivation, the `(role, version)`
+> registry and the context registry (§5). Specified but not yet in code (🟡): BLAKE3 (G2b).
 >
 > **SHAKE-256 is implemented on `libcrux-sha3`** (2026-09-30), replacing RustCrypto `sha3`. The
 > primitive is unchanged — FIPS 202 SHAKE-256 — and the swap was proven byte-neutral by KATs
@@ -75,6 +81,19 @@ These are asserted by tests and MUST hold for suite v1.
 > Note: the executive summary's "2,560 B" refers to the **secret key**; the **signature is
 > 2,420 B** (see ADR-0002 conflict #2). This spec uses the code's values, which are authoritative.
 
+### SLH-DSA-SHAKE-128s (`crates/hux-crypto/src/sig/slh_dsa.rs`)
+| Item | Size | Notes |
+|---|---|---|
+| Public key | **32** | `PK.seed ‖ PK.root` |
+| Secret key | **64** | `SK.seed ‖ SK.prf ‖ PK.seed ‖ PK.root` |
+| Signature | **7856** | |
+| Seed (keygen input) | **48** | `SK.seed ‖ SK.prf ‖ PK.seed`, FIPS 205 Algorithm 18 order |
+| Signing randomness | **16** | `opt_rand`; hedged, from the CSPRNG (§3) |
+
+> There is no BIP32 path for a 48-byte seed yet: `Keypair::generate` (32 bytes) refuses
+> SLH-DSA rather than stretching or truncating, and `Keypair::generate_from_seed` takes the 48.
+> The `Identity` key's derivation is an open item.
+
 ### ML-KEM-768 (`src/crypto/kem.rs`)
 | Item | Const | Size |
 |---|---|---|
@@ -84,6 +103,16 @@ These are asserted by tests and MUST hold for suite v1.
 | Shared secret | — | **32** |
 | Keygen randomness | — | **64** |
 | Encapsulation randomness | — | **32** |
+
+### X25519 + ML-KEM-768 hybrid (`crates/hux-crypto/src/kem/hybrid.rs`)
+| Item | Size | Layout |
+|---|---|---|
+| Encapsulation key | **1216** | `ek_mlkem (1184) ‖ pk_x25519 (32)` |
+| Decapsulation key | **2432** | `dk_mlkem (2400) ‖ sk_x25519 (32)` |
+| Ciphertext | **1120** | `ct_mlkem (1088) ‖ eph_pk_x25519 (32)` |
+| Shared secret | **32** | §4.3 |
+| Keygen seed | **96** | `d ‖ z (64) ‖ sk_x25519 (32)` |
+| Encapsulation randomness | **64** | `m (32) ‖ eph_sk_x25519 (32)` |
 
 ### Hashes / identifiers
 | Item | Size |
@@ -170,6 +199,28 @@ session_key = HKDF-SHA-256(
 - `optional_protocol_label` SHOULD carry the protocol/context (e.g. the handshake context string)
   to bind the key to its use.
 
+### 4.3 X25519 + ML-KEM-768 hybrid — NORMATIVE
+
+✅ *Decided 2026-10-07* (G1 · B5). The application-level hybrid KEM, for session keys Huxplex
+derives itself; the transport's own key exchange is TLS's `X25519MLKEM768` (ADR-0019). Byte
+layout follows that TLS group — the ML-KEM part first in every value (§2).
+
+```
+shared_secret = HKDF-SHA-256(
+    salt = none,
+    ikm  = ss_mlkem (32) ‖ ss_x25519 (32),
+    info = "X25519-MLKEM768-v1-COMBINE" ‖ ct_x25519 (32) ‖ pk_x25519 (32),
+) -> 32 bytes
+```
+
+- **The X25519 values are bound into `info`.** ML-KEM is IND-CCA, so its secret already commits
+  to its ciphertext; X25519's does not. Binding `ct_x25519` and `pk_x25519` keeps the construction
+  IND-CCA when only ML-KEM holds (X-Wing, eprint 2024/039). ML-KEM's secret leads `ikm`.
+- **A low-order X25519 share is rejected** (all-zero output), as TLS `X25519MLKEM768` requires.
+- Directional session keys are then derived from `shared_secret` with §4.2's HKDF.
+- **G1-T5:** with the X25519 output forced to a constant, session keys still differ, and every bit
+  of the ML-KEM secret reaches the combined secret.
+
 ## 5. Context-string registry (domain separation) — NORMATIVE
 
 Every protocol signature MUST be made over exactly one of these context strings. The scheme is
@@ -191,6 +242,13 @@ other (cross-network, cross-shard, cross-phase, cross-purpose). All strings are 
 | Validator registration | `huxplex-{network}:validator:registration:v1` | `Identity` | code |
 | Verifiable credential / Work Visa | `huxplex-{network}:vc:v1` | `Governance` | code |
 | ML-KEM HKDF info prefix | `ML-KEM-768-v1-DERIVE` | — | `src/crypto/kem.rs` |
+| Hybrid KEM combiner info prefix | `X25519-MLKEM768-v1-COMBINE` | — | `src/kem/hybrid.rs` (§4.3) |
+
+> **The registry is code** (2026-10-07): `hux_crypto::context` renders every string from a
+> `Network` and a `Purpose`, binds each purpose to its role, and records retired strings so they
+> are never reissued. `hux-network` builds its gossip and DHT contexts through it. **G1-T2**
+> sweeps every ordered pair of its contexts on both networks — 650 pairs — rather than restating
+> them.
 
 Rules:
 1. The gossip context is computed as `gossip_context(network, topic) =
@@ -339,18 +397,28 @@ ML-DSA-44 PK      : 1312 B
 ML-DSA-44 Sig     : 2420 B   (≈ 37.8× an Ed25519 64 B signature)
 ```
 
-> **Task (R-CRYPTO-KAT):** commit byte-exact fixtures (the resulting 1312/2560-byte keys for the
-> §7.1 seed, and the 2420-byte signature for §7.2) as test data so any reimplementation can prove
-> conformance offline. Generate them from the current `libcrux` versions pinned in `Cargo.toml`
-> (`libcrux-ml-dsa = 0.0.7`, `libcrux-ml-kem = 0.0.7`) and record those versions with the
-> fixtures, since pre-1.0 libcrux output may change between versions.
+> ✅ **Done 2026-10-07 (R-CRYPTO-KAT, G1 · C10).** Byte-exact fixtures are committed in
+> `crates/hux-crypto/tests/kat/`, each recording the crate versions that produced it, in a
+> dependency-free text format any reimplementation can read:
+>
+> | File | Vectors | Independently reproduced by |
+> |---|---|---|
+> | `ml_dsa_44.kat` | §7.1 BIP32 → keypair; keygen + pinned-randomness signatures (incl. §7.2) | RustCrypto `ml-dsa`; aws-lc-rs (empty-context ones) |
+> | `ml_kem_768.kat` | keygen, encapsulate, decapsulate | RustCrypto `ml-kem` |
+> | `slh_dsa_shake_128s.kat` | keygen + pinned-`opt_rand` signatures | RustCrypto `slh-dsa` |
+> | `hybrid_x25519_ml_kem_768.kat` | the §4.3 composition | halves pinned separately; X25519 against RFC 7748 §6.1 |
+>
+> Signature vectors are reproduced through the test-only signing entry point (§3); the public API
+> can only verify them.
 
 ## 8. Dependencies pinned (suite v1 provenance)
 ```
-libcrux-ml-dsa = 0.0.7
-libcrux-ml-kem = 0.0.7
-hkdf = 0.12, sha2 = 0.10 (SHA-256), sha3 = 0.10 (SHAKE-256)
+libcrux-ml-dsa = 0.0.10, libcrux-ml-kem = 0.0.10, libcrux-sha3 = 0.0.10 (SHAKE-256)
+libcrux-curve25519 = 0.0.9 (X25519, HACL*)
+fips205 = 0.4.1 (SLH-DSA-SHAKE-128s only)
+hkdf = 0.13, sha2 = 0.11 (SHA-256)
 bip32 = 0.5
+dev-only oracles: ml-dsa 0.1.1, ml-kem 0.3.2, slh-dsa 0.2.0-rc.5, aws-lc-rs 1.18
 ```
 A change to any of these is a potential KAT-affecting change and MUST re-verify §7.
 
@@ -361,11 +429,11 @@ A change to any of these is a potential KAT-affecting change and MUST re-verify 
 *All three of this document's standing questions were closed on 2026-09-22 — see §5 rule 2
 (network-generalized contexts), §3 (hedged signing) and §4.2 (initiator-first ordering).*
 
-- Must the §7 KAT fixtures pin the 32-byte signing randomness explicitly (the only way byte-exact
-  signature fixtures survive hedged signing), and where does the test-only signing entry point
-  live so it cannot be reached from the public API?
-- **Which context does the TLS ML-DSA profile use** for `CertificateVerify` — empty, or a
-  TLS-specific one? FIPS 204 encodes the context's length and bytes into the signed preimage, so
-  either way a TLS signature and a `huxplex-…:v1` protocol signature have different preimages;
-  but the exact value must be confirmed against the published RFC and pinned by **G5-T7**.
-  ([ADR-0019](../adr/0019-transport-authentication.md) §4.)
+- ~~Must the §7 KAT fixtures pin the signing randomness, and where does the test-only entry point
+  live?~~ ✅ *Closed 2026-10-07.* Yes — every signature fixture records its randomness. Signing
+  randomness is a `SigningRandomness` only `hux-crypto` can construct; the explicit-bytes
+  constructor and `Keypair::sign_with_randomness` exist only under `cfg(test)`, and `compile_fail`
+  doctests prove neither is reachable from the public API.
+- ~~**Which context does the TLS ML-DSA profile use?**~~ ✅ *Closed 2026-10-07.* **Empty**, per
+  `draft-ietf-tls-mldsa`. Pinned by `g5_t7_the_tls_context_is_pinned_empty`; separation from every
+  registry context, in both directions, by `g5_t7_tls_and_protocol_signatures_never_verify_as_each_other`.

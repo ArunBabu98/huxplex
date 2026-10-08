@@ -163,33 +163,55 @@ fn g1_t4_unregistered_pair_fails_with_a_distinct_error() {
     }
 }
 
-// ─── Registered-but-unimplemented is its own state ───────────────────────────────────────────
+// ─── C7 · the long-lived roles get their own primitive ───────────────────────────────────────
 
 #[test]
-fn unimplemented_scheme_is_distinct_from_unknown_and_never_substituted() {
-    // Suite v1 resolves Identity and Governance to SLH-DSA-128s, which arrives at G1 task C7.
-    // Until then the registry must say "registered, not built" — and must NOT fall back to the
-    // hot-path scheme. Silently substituting ML-DSA for a root-of-trust primitive is exactly the
-    // downgrade the registry exists to prevent.
-    let scheme = AlgoSuite::new(SigRole::Identity, SuiteVersion::V1)
-        .signature_scheme()
-        .expect("the row exists");
-    assert_eq!(scheme, SignatureSchemeId::SlhDsa128s);
-    assert!(!scheme.is_implemented());
+fn long_lived_roles_resolve_to_slh_dsa_never_the_hot_path_scheme() {
+    // Identity and Governance were registered against SLH-DSA-128s before it existed, and
+    // resolved to SchemeUnimplemented until G1 task C7. Now that it exists, what must hold is the
+    // property that state protected: these roles get the hash-based scheme, and nothing ever
+    // substitutes ML-DSA for a root-of-trust primitive.
+    for role in [SigRole::Identity, SigRole::Governance] {
+        let scheme = AlgoSuite::new(role, SuiteVersion::V1)
+            .signature_scheme()
+            .unwrap();
+        assert_eq!(scheme, SignatureSchemeId::SlhDsa128s, "{role:?}");
+        assert!(scheme.is_implemented());
 
-    match traits::implementation(scheme) {
-        Err(SuiteError::SchemeUnimplemented { scheme: s }) => {
-            assert_eq!(s, SignatureSchemeId::SlhDsa128s);
-        }
-        Err(other) => panic!("expected SchemeUnimplemented, got {other:?}"),
-        Ok(_) => panic!("SLH-DSA-128s must not resolve to an implementation before C7"),
+        let sizes = traits::implementation(scheme).unwrap().sizes();
+        // FIPS 205 Table 2 — and visibly not ML-DSA-44's 1312 / 2560 / 2420.
+        assert_eq!(
+            (sizes.public_key, sizes.secret_key, sizes.signature),
+            (32, 64, 7856),
+            "{role:?} resolved to the wrong primitive"
+        );
+        assert_eq!((sizes.seed, sizes.signing_randomness), (48, 16));
     }
+}
 
-    // And the keypair constructor must refuse it rather than producing something usable.
-    assert!(
-        Keypair::generate(SignatureSchemeId::SlhDsa128s, [0u8; 32]).is_err(),
-        "generating an SLH-DSA keypair must fail before C7, not silently use ML-DSA"
-    );
+#[test]
+fn every_registered_row_resolves_to_an_implementation() {
+    // A row whose scheme is unimplemented fails closed for every object of that role. That is a
+    // legitimate state *between* gates; at G1's exit no suite-v1 row may be in it.
+    for (role, version, scheme) in registry::registered_pairs() {
+        assert!(
+            traits::implementation(scheme).is_ok() && traits::verifier(scheme).is_ok(),
+            "({role:?}, {version:?}) → {scheme:?} has no implementation"
+        );
+    }
+}
+
+#[test]
+fn a_keypair_cannot_be_used_under_a_scheme_it_was_not_generated_for() {
+    // Two implemented schemes make scheme confusion possible for the first time. A public key
+    // must refuse a signature carrying another scheme's identifier before any cryptography runs.
+    let dsa = Keypair::generate(SignatureSchemeId::Dilithium2, [1u8; 32]).unwrap();
+    let slh = Keypair::generate_from_seed(SignatureSchemeId::SlhDsa128s, &[2u8; 48]).unwrap();
+    let sig = slh.sign(b"m", None).unwrap();
+    assert!(matches!(
+        dsa.public_key().verify(b"m", &sig, None),
+        Err(hux_crypto::error::CryptoError::SchemeMismatch { .. })
+    ));
 }
 
 // ─── G1-T6 · role confusion ──────────────────────────────────────────────────────────────────
@@ -236,13 +258,9 @@ fn g1_t6_a_role_mismatch_is_reported_as_itself() {
 
 #[test]
 fn g1_t1_descriptor_shape_supports_per_role_rotation() {
-    // The full G1-T1 — register a second scheme, flip ONE role's default, confirm old objects
-    // still verify and other roles are untouched — needs a second *implemented* scheme, which
-    // arrives with SLH-DSA at C7. What can be established now is the property that makes it
-    // possible: resolution is per-(role, version), so one role's row cannot affect another's.
-    //
-    // This is deliberately not marked #[ignore]: it tests real structure today, and it is the
-    // half of G1-T1 that the descriptor shape is responsible for.
+    // The descriptor half of G1-T1. The rotation half — a suite-v2 table that flips QuorumCert to
+    // SLH-DSA while v1 objects keep verifying — is `suite::registry::g1_t1_rotation`, a unit test
+    // because a second suite version exists only in test builds.
     let transaction_v1 = AlgoSuite::new(SigRole::Transaction, SuiteVersion::V1)
         .signature_scheme()
         .unwrap();
@@ -306,6 +324,7 @@ fn c6_sizes_are_available_from_the_resolved_scheme() {
     assert_eq!(sizes.secret_key, 2560);
     assert_eq!(sizes.signature, 2420);
     assert_eq!(sizes.seed, 32);
+    assert_eq!(sizes.signing_randomness, 32);
 
     let keypair = Keypair::generate(scheme, [7u8; 32]).unwrap();
     assert_eq!(keypair.public_key().bytes.len(), sizes.public_key);

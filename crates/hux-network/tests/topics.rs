@@ -5,7 +5,7 @@
 //!
 //! See `docs/18-implementation-plan/00-workspace-migration.md`.
 
-use hux_crypto::{signature::Keypair, signaturescheme::SignatureSchemeId};
+use hux_crypto::{context::Network, signature::Keypair, signaturescheme::SignatureSchemeId};
 use hux_network::{
     message::GossipMessage,
     topic::{GossipTopic, gossip_context},
@@ -215,7 +215,7 @@ fn test_gossip_message_wrong_network_context_fails_verification() {
         GossipMessage::sign(&kp, topic, "mainnet", b"block-hash:deadbeef".to_vec()).unwrap();
 
     // Switch to testnet after signing
-    msg.network = "testnet".to_string();
+    msg.network = Network::Testnet;
     assert!(
         !msg.verify().unwrap(),
         "Mainnet gossip message must not verify on testnet context"

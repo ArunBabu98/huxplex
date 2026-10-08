@@ -47,8 +47,10 @@ message *types* but no actual swarm, transport, or peer state machine.
 
 > **Where that sits against the plan**, audited continuously in [`20-completion/`](20-completion/):
 > Layer 0 is **G0 + G1 + G2a + G5** ([ADR-0022](adr/0022-g2-split-wire-and-consensus-encoding.md)),
-> and it is roughly **35%** done — G0 closed, G1 about half built, G2a and G5 not started.
-> T0 has been left behind; T1 has not been reached.
+> and as of **2026-10-08 it is complete**: G0 closed in CI 2026-09-23; **G1, G2a and G5 closed
+> 2026-10-08**, green on the three-architecture CI matrix (run [37746269760](https://github.com/ArunBabu98/huxplex/actions/runs/37746269760)). The transport exists:
+> QUIC with native ML-DSA-44 TLS certificates, GossipSub and Kademlia, tested against a live
+> attacker peer.
 
 ## 3. What is claimed but does not exist (🟡 / 🔴 the gap)
 

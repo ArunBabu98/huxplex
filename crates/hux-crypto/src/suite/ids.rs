@@ -24,11 +24,10 @@
 pub enum SignatureSchemeId {
     /// ML-DSA-44, FIPS 204. Hot path: transactions, votes, transport certificates.
     Dilithium2 = 1,
-    /// SLH-DSA-128s, FIPS 205. Long-lived identity and governance.
+    /// SLH-DSA-SHAKE-128s, FIPS 205. Long-lived identity and governance.
     ///
-    /// **Registered but not yet implemented** — G1 task C7. The registry resolves roles to this
-    /// identifier today; asking for an implementation of it returns
-    /// [`SuiteError::SchemeUnimplemented`](super::SuiteError::SchemeUnimplemented).
+    /// The SHAKE instantiation of the 128s parameter set — the identifier names the parameter
+    /// set as the crypto spec does, and `sig::slh_dsa` records why SHAKE rather than SHA-2.
     SlhDsa128s = 2,
 }
 
@@ -53,9 +52,10 @@ impl SignatureSchemeId {
     /// Whether an implementation is available in this build.
     ///
     /// A registered identifier with no implementation is a normal, expected state between
-    /// gates — the row exists so the descriptor shape is right, and C7 fills it in.
+    /// gates — the row exists so the descriptor shape is right before the primitive lands.
+    /// Every identifier registered today is implemented.
     pub fn is_implemented(self) -> bool {
-        matches!(self, Self::Dilithium2)
+        matches!(self, Self::Dilithium2 | Self::SlhDsa128s)
     }
 }
 
@@ -66,6 +66,8 @@ impl SignatureSchemeId {
 pub enum KemId {
     /// ML-KEM-768, FIPS 203.
     MlKem768 = 1,
+    /// X25519 + ML-KEM-768 hybrid (ADR-0002, `kem::hybrid`). Suite v1's key agreement.
+    X25519MlKem768 = 2,
 }
 
 impl KemId {
@@ -76,6 +78,7 @@ impl KemId {
     pub fn from_u16(raw: u16) -> Option<Self> {
         match raw {
             1 => Some(Self::MlKem768),
+            2 => Some(Self::X25519MlKem768),
             _ => None,
         }
     }
