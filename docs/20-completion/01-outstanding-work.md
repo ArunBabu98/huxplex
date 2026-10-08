@@ -40,12 +40,16 @@ None blocks Layer 0. Each is a decision for its owner, recorded so it is not red
    machine-checked, so nothing fails — but it is exactly the purpose/role drift C1 exists to
    prevent. Options: move `dht:entry` to the `Transport` role (a spec change, and a new context
    version), or bind a `Transaction` key to the `PeerId` through the validator-registration record.
-   **Owner: protocol.**
+   **Decided 2026-10-08: bind a `Transaction` key.** Spec §5 stands; the binding arrives with the
+   validator-registration record (G6). Until then records stay on the `Transport` key, and this
+   item stays open as the reminder that they must move. **Owner: protocol.**
 2. **(found 2026-10-07) The first-flight margin is ≈ 150 B.** Measured on the wire by G5-T6 with
    Initial padding at 1,372 B and 4-byte connection IDs. The structural alternative is TLS **raw
    public keys** (RFC 7250): the identity *is* the key, so the X.509 wrapper and its self-signature
    (≈ 2.5 KB of the flight) carry nothing the `CertificateVerify` does not. That would be an
-   ADR-0019 change. **Owner: networking.**
+   ADR-0019 change. **Decided 2026-10-08: deferred, revisit at G6** — the margin holds (147–161 B
+   over 15 runs) and G5-T6 guards it; G6 is where something may next want to grow the first
+   flight. **Owner: networking.**
 3. **SLH-DSA keys have no HD derivation path.** BIP32 yields 32 bytes; SLH-DSA-128s needs a 48-byte
    seed. `Keypair::generate` refuses rather than inventing a derivation;
    `Keypair::generate_from_seed` takes the 48 bytes. The `Identity` key's derivation needs
@@ -53,6 +57,51 @@ None blocks Layer 0. Each is a decision for its owner, recorded so it is not red
 4. **`multibase` is pinned at 0.9.2** in `Cargo.lock` because `base45` 3.2 needs rustc 1.88
    without declaring it. A `cargo update` without `--precise` will break the 1.85 build; the pin
    lifts when the toolchain moves. **Owner: build.**
+
+---
+
+## Review of `master..HEAD` — 2026-10-08
+
+A critical review of the Layer-0 branch before it closed, done by hand against the gate
+definitions in [`16-action-plan.md`](../16-action-plan.md). Every fix landed in `ba1e5fb` with a
+test, and every new test was **mutation-checked**: re-introducing the old behaviour makes it fail.
+
+### Fixed
+
+| # | Finding | Severity | Fix | Test |
+|---|---|---|---|---|
+| R1 | **G5-T5 was weaker than its definition.** "Nor replayed after expiry": `DhtEntry` had no ordering, so a publisher's old, genuinely signed record could be replayed over its newer one, rolling the DHT back to a stale address. Forgery tests all passed, because the replayed record *is* genuine | high | signed `seq` in `DhtEntry` (wire v1 re-cut before G2a closed; golden vector regenerated); nodes keep only a superseding record; lookups return the highest `seq` | `g5_t5_an_old_record_cannot_be_replayed_over_a_newer_one`, `g5_t5_the_sequence_number_is_signed_and_orders_generations` |
+| R2 | **Muxer panic.** `poll` / `poll_close` re-polled a completed `async` block after the connection ended — *"resumed after completion"*. The swarm happens not to re-poll today; nothing promised it | medium | both answer from `close_reason()` once the connection has one | `muxer_close_and_poll_are_safe_to_repeat_after_the_end` (panicked before) |
+| R3 | **`remove_listener` killed outbound connections** — it closed the endpoint they share | medium | stop accepting (`set_server_config(None)`); keep the endpoint | `removing_the_listener_keeps_outbound_connections` |
+| R4 | **Dial-before-listen leaked.** The ephemeral endpoint ran a server whose accept queue nothing drained — every inbound to it queued forever | medium | a dial-only endpoint has no server config | structural (no server ⇒ nothing to queue); documented in `p2p.rs` |
+| R5 | **No connection ceiling.** Every Kademlia `RoutingUpdated` dialled; inbound was unlimited | medium | `connection_limits`: `max_peers` (128), 64 pending handshakes, 2 per peer; discovery dials stop at `target_peers` (32) | `bounds_connections_never_exceed_max_peers` |
+| R6 | **Unbounded memory from a hostile peer**: the event channel (valid gossip from self-signed spam keys), the peer table (one entry per identity ever seen), the per-peer dial-config cache (Kademlia hands out invented `PeerId`s), the accepted-connection hand-off | medium | events bounded and **dropped** when full; idle peers forgotten after 10 min; config cache capped at 256 (FIFO); hand-off bounded at 64, quinn `max_incoming` 256 | `bounds_an_application_that_stops_reading_cannot_grow_the_node`, `n8_disconnected_peers_are_forgotten_so_the_table_stays_bounded`, `the_dial_config_cache_is_bounded` |
+| R7 | **Offences by an already-banned peer re-banned it** — extending the ban and re-announcing `PeerBanned` for messages already in flight | low | `Verdict::AlreadyBanned`; the ban keeps its original expiry | `n11_an_offence_by_a_banned_peer_neither_extends_nor_repeats_the_ban` |
+| R8 | **G5-T7 swept 24 contexts, G1-T2 26** — "every registry context" meant two different sets | low | the same four topic shapes as G1-T2 | `g5_t7_tls_and_protocol_signatures_never_verify_as_each_other` |
+| R9 | **IPv6 untested** | low | — | `ipv6_two_nodes_authenticate_and_gossip_over_loopback` |
+| R10 | **The G5 exit test raced Kademlia.** It sampled routing tables the instant connections completed; a peer enters the table only after confirming the protocol on a stream. **This is what failed CI run [37741299344](https://github.com/ArunBabu98/huxplex/actions/runs/37741299344)** on x86_64 and macOS (3 entries, not 4) | test | wait for the routing tables, as for the connections | the exit test |
+
+### Recorded as acceptable, with the reason
+
+| Finding | Why it stands |
+|---|---|
+| The command channel is unbounded | only the local application writes to it |
+| Ban expiry runs on a 1 s tick | 1 s of granularity on a 600 s ban |
+| GossipSub score parameters are hand-picked | G5-T3's ban comes from the Huxplex `PeerTable`, whose penalties are tested exactly; GossipSub's scores are a second layer. Calibrate against the G7 soak, not before there is traffic to calibrate on |
+| **G5-T3 proves a ban, not a bandwidth figure.** The definition says "per-peer bandwidth stays bounded" | the bound is real but is a product, not a measurement: ≤ 5 offences (ban at −100, minimum penalty −20) × `MAX_ENVELOPE_LEN` (4 MiB) ≈ 20 MiB, each costing one decode and at most one ML-DSA verification, **per identity**. Identities are free, so the Sybil bound is the connection ceiling (R5). A measured per-peer byte test is a G7-soak item |
+| G5-T1 "no stream before mutual authentication" is proven at the quinn layer, not through the swarm | `HuxTransport` yields a connection to the swarm only after `Connecting` resolves, which requires the client certificate to have verified (`client_auth_mandatory`); there is no earlier object the swarm could open a stream on |
+| G5-T6 is measured on loopback | the byte count is path-independent; the 1,420-byte tunnel MTU is what `INITIAL_DATAGRAM_SIZE` is sized for |
+| The hybrid KEM (`kem/hybrid.rs`) has no production caller | TLS's `X25519MLKEM768` is aws-lc-rs's, by ADR-0019. Huxplex's own hybrid is for application-layer key agreement, which no gate has yet asked for. Its KATs and G1-T5 keep it honest until one does |
+| `network_walkthrough` does not exercise the transport | it walks the envelope and identity rules; the transport has `tests/network.rs`. Extending the walkthrough is cheap and worth doing, but not a gate item |
+| No `cargo-fuzz` target; G2-T4 is a 10⁶-iteration test | G2's exit criterion ("fuzz target in CI") is a **G2** criterion, shared by both halves; it is task **E8** of [G2b](../18-implementation-plan/05-g2b-consensus-encoding.md), covering the wire decoders too. G2a closes on G2-T1/T2/T4 as ADR-0022 scoped it |
+
+### Measured, not assumed
+
+- **Flake rate.** `cargo test --all-targets --all-features --locked`, 6 runs at `d70bb9f` and 5 at
+  `ba1e5fb`, arm64: **0 failures in 11 runs.** The one CI failure (R10) did not reproduce locally
+  in 6 runs; it needed a slower runner.
+- **G5-T6 margin**, 15 runs of `cargo test -p hux-network --test transport g5_t6 -- --nocapture`:
+  client flight **2,744 B** every run, budget **8,232 B**, margin **147–161 B** (median 154 B).
 
 ---
 
