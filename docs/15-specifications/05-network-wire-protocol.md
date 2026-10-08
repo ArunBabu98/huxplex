@@ -151,7 +151,7 @@ is a conformance item to confirm against the published RFC.
   (Hostile-agent / spam mitigation, risk #6.)
 
 ## 4. Discovery (Kademlia DHT)
-- Records are `DhtEntry { suite, network, key, value, signer_pk, sig }` in the canonical wire
+- Records are `DhtEntry { suite, network, key, value, seq, signer_pk, sig }` in the canonical wire
   encoding (§7), signed over the encoding of every field but `sig`, with context
   `huxplex-{network}:dht:entry:v1` (crypto spec §5). *(Until G2a the payload was the hand-framed
   `u64_be(len(key)) ‖ key ‖ u64_be(len(value)) ‖ value`; the codec's length prefixes now carry
@@ -161,6 +161,12 @@ is a conformance item to confirm against the published RFC.
   > the key decides routing, an attacker could re-split any observed record and republish the
   > publisher's signature **under a different key**, holding no private key — the exact opposite
   > of G5-T5. Framing is normative; implementations MUST NOT sign the bare concatenation.
+- **Replay of a superseded record.** `seq` is signed. A node holding a record for a key MUST NOT
+  replace it with one of lower `seq`, or of equal `seq` and different bytes; a lookup MUST return
+  the highest-`seq` valid record it finds. Without this an old, genuinely signed record could be
+  replayed over its successor forever (G5-T5 "nor replayed after expiry"). `seq` defaults to the
+  publisher's clock in microseconds. *(Added 2026-10-08, before the G2a freeze closed in CI; the
+  golden vector was re-cut.)*
 - The DHT **key MUST be the signer's `PeerId`** — `SHAKE-256(signer_pk)[..32]` — and equal the
   record key; `value` is its dialable address(es). *(Tightened from SHOULD, 2026-10-07: it is what
   stops a peer publishing under another's key — G5-T5.)*
@@ -226,13 +232,14 @@ envelope is encoded through the canonical `Codec` (postcard; ADR-0011), decoded 
 
 ```text
 GossipMessage = suite ‖ network ‖ topic   ‖ payload ‖ from      ‖ sig
-DhtEntry      = suite ‖ network ‖ key     ‖ value   ‖ signer_pk ‖ sig
+DhtEntry      = suite ‖ network ‖ key     ‖ value   ‖ seq ‖ signer_pk ‖ sig
                 └─────────── body: the bytes the signature covers ──┘
 
 suite     = role: varint u32 ‖ version: varint u16         (ADR-0011 rule 3′: both axes)
 network   = code: u8                                         (1 = mainnet, 2 = testnet; 0 never)
 topic     = len ‖ UTF-8, canonical form only (crypto spec §6.2; no leading zeros, no sign)
 payload, key, value = len ‖ bytes
+seq                 = varint u64 — publisher's sequence number (DhtEntry only; added 2026-10-08)
 from, signer_pk     = scheme: varint u16 ‖ len ‖ key   (len MUST equal the scheme's key size)
 sig                 = scheme: varint u16 ‖ len ‖ sig   (len MUST equal the scheme's signature size)
 ```

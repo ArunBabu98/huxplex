@@ -440,10 +440,14 @@ fn wire_v1_golden_gossip_message() {
 
 #[test]
 fn wire_v1_golden_dht_entry() {
+    // Re-cut 2026-10-08, before G2a closed in CI, to add the signed `seq` (G5-T5: an old record
+    // must not replay over a newer one). Same key and value as the first cut; `seq` = 1 sits
+    // between `value` and `signer_pk`.
     let bytes = unhex(include_str!("wire/dht_entry_v1.hex"));
     let entry = DhtEntry::decode(&bytes).unwrap();
     assert_eq!(entry.network, Network::Mainnet);
     assert_eq!(entry.value, b"/ip4/127.0.0.1/udp/9000/quic-v1");
+    assert_eq!(entry.seq, 1);
     assert_eq!(
         entry.key,
         hux_network::peer::PeerId::from_ml_dsa_pk(entry.signer_pk.clone()).id,

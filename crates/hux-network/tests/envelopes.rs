@@ -118,6 +118,7 @@ fn test_dht_entry_key_value_boundary_is_unambiguous() {
     let forged = DhtEntry {
         key: b"ab".to_vec(),
         value: b"cXY".to_vec(),
+        seq: honest.seq,
         suite: honest.suite,
         network: honest.network,
         sig: honest.sig.clone(),
@@ -146,6 +147,7 @@ fn test_dht_entry_empty_key_and_empty_value_are_distinguishable() {
     let swapped = DhtEntry {
         key: b"AB".to_vec(),
         value: Vec::new(),
+        seq: empty_key.seq,
         suite: empty_key.suite,
         network: empty_key.network,
         sig: empty_key.sig.clone(),
@@ -340,4 +342,36 @@ fn test_network_identity_and_message_overhead() {
     assert_eq!(pid.id.len(), 32);
     assert_eq!(msg.sig.bytes.len(), 2420);
     assert_eq!(kp.public_key().bytes.len(), 1312);
+}
+
+#[test]
+fn g5_t5_the_sequence_number_is_signed_and_orders_generations() {
+    // A replayed old record can only win if its seq can be raised without the key — it cannot.
+    let kp = make_keypair(0x12);
+    let pid = PeerId::from_ml_dsa_pk(kp.public_key().clone());
+    let old = DhtEntry::sign_with_seq(&kp, pid.id.to_vec(), b"10.0.0.1:1".to_vec(), 1, "mainnet")
+        .unwrap();
+    let new = DhtEntry::sign_with_seq(&kp, pid.id.to_vec(), b"10.0.0.2:2".to_vec(), 2, "mainnet")
+        .unwrap();
+    assert!(old.verify().unwrap() && new.verify().unwrap());
+
+    let mut bumped = old.clone();
+    bumped.seq = 3;
+    assert!(!bumped.verify().unwrap(), "seq is outside the signature");
+
+    assert!(new.supersedes(&old));
+    assert!(
+        !old.supersedes(&new),
+        "an older generation replaced a newer one"
+    );
+    assert!(
+        old.supersedes(&old),
+        "re-storing the identical record is a no-op"
+    );
+    let same_seq =
+        DhtEntry::sign_with_seq(&kp, pid.id.to_vec(), b"other".to_vec(), 2, "mainnet").unwrap();
+    assert!(
+        !same_seq.supersedes(&new),
+        "two different records at one seq: the held one stays"
+    );
 }

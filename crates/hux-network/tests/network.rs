@@ -49,7 +49,7 @@ use libp2p::{
     kad::{self, Quorum, Record, RecordKey, store::MemoryStore},
     swarm::{NetworkBehaviour, SwarmEvent},
 };
-use tokio::sync::mpsc::UnboundedReceiver;
+use tokio::sync::mpsc::Receiver;
 
 const NET: Network = Network::Testnet;
 
@@ -71,12 +71,23 @@ async fn start(
     i: u8,
     bootstrap: &[(PeerId, SocketAddr)],
     filter: Option<Arc<dyn DatagramFilter>>,
-) -> (NodeHandle, UnboundedReceiver<NodeEvent>) {
+) -> (NodeHandle, Receiver<NodeEvent>) {
+    start_with(i, bootstrap, filter, |_| {}).await
+}
+
+/// As [`start`], with a chance to adjust the config.
+async fn start_with(
+    i: u8,
+    bootstrap: &[(PeerId, SocketAddr)],
+    filter: Option<Arc<dyn DatagramFilter>>,
+    adjust: impl FnOnce(&mut NodeConfig),
+) -> (NodeHandle, Receiver<NodeEvent>) {
     let mut config = NodeConfig::new(NET, transport_key(i), "127.0.0.1:0".parse().unwrap());
     config.topics = topics();
     config.heartbeat = Duration::from_millis(200);
     config.bootstrap = bootstrap.to_vec();
     config.datagram_filter = filter;
+    adjust(&mut config);
     Node::start(config).await.unwrap().split()
 }
 
@@ -84,7 +95,7 @@ async fn start(
 async fn network(
     n: u8,
     filter: Option<Arc<dyn DatagramFilter>>,
-) -> Vec<(NodeHandle, UnboundedReceiver<NodeEvent>)> {
+) -> Vec<(NodeHandle, Receiver<NodeEvent>)> {
     let first = start(0, &[], filter.clone()).await;
     let boot = [(first.0.peer_id(), first.0.listen_addr())];
     let mut nodes = vec![first];
@@ -120,7 +131,7 @@ async fn fully_connected(nodes: &[NodeHandle]) -> bool {
 }
 
 /// Collects every gossip payload each node receives, in the background.
-fn collect(events: Vec<UnboundedReceiver<NodeEvent>>) -> Vec<Arc<Mutex<Vec<NodeEvent>>>> {
+fn collect(events: Vec<Receiver<NodeEvent>>) -> Vec<Arc<Mutex<Vec<NodeEvent>>>> {
     events
         .into_iter()
         .map(|mut rx| {
@@ -164,9 +175,25 @@ async fn g5_exit_five_nodes_discover_authenticate_gossip_and_sustain_sessions() 
         eventually(Duration::from_secs(15), || fully_connected(&handles)).await,
         "5 nodes did not all discover and authenticate each other"
     );
-    for node in &handles {
-        assert_eq!(node.routing_table().await.unwrap().len(), 4);
-    }
+    // Kademlia adds a peer to its routing table once the peer has confirmed the protocol on a
+    // stream, which can trail the connection itself — on a slow CI runner, by long enough to see
+    // three entries instead of four (PR #24, x86_64 and macOS legs). Discovery is the property,
+    // so wait for it rather than sample it.
+    assert!(
+        eventually(Duration::from_secs(15), || {
+            let handles = handles.clone();
+            async move {
+                for node in &handles {
+                    if node.routing_table().await.unwrap().len() != 4 {
+                        return false;
+                    }
+                }
+                true
+            }
+        })
+        .await,
+        "a routing table never learned all four other nodes"
+    );
 
     // G5-T2, live: every authenticated peer is exactly the PeerId of a key in this network.
     let expected: HashSet<PeerId> = (0..5)
@@ -581,6 +608,12 @@ fn record_for(publisher: u8, value: &[u8], network: &str) -> DhtEntry {
     DhtEntry::sign(&kp, key, value.to_vec(), network).unwrap()
 }
 
+fn record_at(publisher: u8, value: &[u8], seq: u64) -> DhtEntry {
+    let kp = transport_key(publisher);
+    let key = PeerId::from_ml_dsa_pk(kp.public_key().clone()).id.to_vec();
+    DhtEntry::sign_with_seq(&kp, key, value.to_vec(), seq, NET.as_str()).unwrap()
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn g5_t5_the_live_dht_refuses_forgery_rekeying_and_cross_network_replay() {
     let (handles, events): (Vec<_>, Vec<_>) = network(4, None).await.into_iter().unzip();
@@ -669,4 +702,194 @@ async fn g5_t5_the_live_dht_refuses_forgery_rekeying_and_cross_network_replay() 
             "a cross-network record was stored"
         );
     }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn g5_t5_an_old_record_cannot_be_replayed_over_a_newer_one() {
+    // The replay half of G5-T5: a publisher's own, genuinely signed, *superseded* record. Every
+    // check that stops forgery passes it — only the sequence number can refuse it.
+    let (handles, events): (Vec<_>, Vec<_>) = network(3, None).await.into_iter().unzip();
+    let _seen = collect(events);
+    assert!(eventually(Duration::from_secs(15), || fully_connected(&handles)).await);
+    let a = &handles[0];
+
+    let old = record_at(0, b"/ip4/10.0.0.1/udp/9000/quic-v1", 1);
+    let new = record_at(0, b"/ip4/10.0.0.9/udp/9000/quic-v1", 2);
+    a.put_record(old.clone()).await.unwrap();
+    a.put_record(new.clone()).await.unwrap();
+    // The publisher itself refuses to step back.
+    assert!(a.put_record(old.clone()).await.is_err());
+
+    // The attacker saw the old record and replays it to everyone.
+    let (swarm, _) = attacker(51);
+    let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+    run_attacker(swarm, rx);
+    for node in &handles {
+        tx.send(AttackerCommand::Dial(node.peer_id(), node.listen_addr()))
+            .unwrap();
+    }
+    tokio::time::sleep(Duration::from_secs(1)).await;
+    tx.send(AttackerCommand::Put(Record::new(
+        RecordKey::new(&old.key),
+        old.encode(),
+    )))
+    .unwrap();
+    tokio::time::sleep(Duration::from_secs(2)).await;
+
+    for (i, node) in handles.iter().enumerate() {
+        assert_eq!(
+            node.get_record(a.peer_id()).await.unwrap(),
+            Some(new.clone()),
+            "node {i} was rolled back to the old record"
+        );
+    }
+}
+
+// ─── Resource bounds ─────────────────────────────────────────────────────────────────────────
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn bounds_connections_never_exceed_max_peers() {
+    // Four nodes all bootstrap off a hub that accepts two. Whatever order they arrive in, and
+    // however Kademlia then introduces them, the hub never holds a third connection.
+    let hub = start_with(60, &[], None, |c| c.max_peers = 2).await;
+    let boot = [(hub.0.peer_id(), hub.0.listen_addr())];
+    let mut others = Vec::new();
+    for i in 61..65 {
+        others.push(start(i, &boot, None).await);
+    }
+    let mut most = 0;
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+    while tokio::time::Instant::now() < deadline {
+        most = most.max(hub.0.connected_peers().await.unwrap().len());
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    assert!(most >= 1, "the hub accepted nobody — the bound is vacuous");
+    assert!(
+        most <= 2,
+        "the hub held {most} connections with max_peers = 2"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn bounds_an_application_that_stops_reading_cannot_grow_the_node() {
+    // The receiver's event buffer holds 4. It is never read while 20 messages arrive; the node
+    // must keep serving commands, and the buffer must hold no more than its bound.
+    let sender = start(70, &[], None).await;
+    let (receiver, mut events) = start_with(
+        71,
+        &[(sender.0.peer_id(), sender.0.listen_addr())],
+        None,
+        |c| c.event_buffer = 4,
+    )
+    .await;
+    let _sender_events = collect(vec![sender.1]);
+    let pair = [sender.0.clone(), receiver.clone()];
+    assert!(eventually(Duration::from_secs(10), || fully_connected(&pair)).await);
+    tokio::time::sleep(Duration::from_secs(1)).await; // mesh
+
+    for k in 0..20 {
+        sender
+            .0
+            .publish(gossip(
+                70,
+                GossipTopic::intents(),
+                format!("unread {k}").as_bytes(),
+            ))
+            .await
+            .unwrap();
+    }
+    tokio::time::sleep(Duration::from_secs(2)).await;
+    assert_eq!(
+        receiver.connected_peers().await.unwrap(),
+        vec![sender.0.peer_id()],
+        "the node stopped serving commands"
+    );
+    let mut held = 0;
+    while events.try_recv().is_ok() {
+        held += 1;
+    }
+    assert!(held <= 4, "{held} events queued against a bound of 4");
+    assert!(held >= 1, "nothing was delivered — the bound is vacuous");
+}
+
+// ─── IPv6 ────────────────────────────────────────────────────────────────────────────────────
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn ipv6_two_nodes_authenticate_and_gossip_over_loopback() {
+    let v6 = |c: &mut NodeConfig| c.listen = "[::1]:0".parse().unwrap();
+    let a = start_with(80, &[], None, v6).await;
+    assert!(a.0.listen_addr().is_ipv6());
+    let b = start_with(81, &[(a.0.peer_id(), a.0.listen_addr())], None, v6).await;
+    let pair = [a.0.clone(), b.0.clone()];
+    assert!(eventually(Duration::from_secs(10), || fully_connected(&pair)).await);
+    let seen = collect(vec![a.1, b.1]);
+    tokio::time::sleep(Duration::from_secs(1)).await;
+    a.0.publish(gossip(80, GossipTopic::intents(), b"over ipv6"))
+        .await
+        .unwrap();
+    assert!(
+        eventually(Duration::from_secs(5), || {
+            let seen = seen[1].clone();
+            async move { payloads(&seen).contains(b"over ipv6".as_slice()) }
+        })
+        .await
+    );
+}
+
+// ─── The transport's listener lifecycle ──────────────────────────────────────────────────────
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn removing_the_listener_keeps_outbound_connections() {
+    // One endpoint listens and dials. Closing it with the listener used to cut every outbound
+    // connection too; removing the listener must only stop new inbound ones.
+    let target = start(90, &[], None).await;
+    let _target_events = collect(vec![target.1]);
+    let (mut swarm, me) = attacker(91);
+    let listener = swarm
+        .listen_on("/ip4/127.0.0.1/udp/0/quic-v1".parse().unwrap())
+        .unwrap();
+    let my_addr = loop {
+        if let SwarmEvent::NewListenAddr { address, .. } = swarm.select_next_some().await {
+            break hux_network::transport::p2p::parse_address(&address)
+                .unwrap()
+                .0;
+        }
+    };
+    swarm
+        .dial(
+            libp2p::swarm::dial_opts::DialOpts::peer_id(target.0.peer_id().to_libp2p())
+                .addresses(vec![socket_to_multiaddr(target.0.listen_addr())])
+                .build(),
+        )
+        .unwrap();
+    loop {
+        if let SwarmEvent::ConnectionEstablished { .. } = swarm.select_next_some().await {
+            break;
+        }
+    }
+
+    assert!(swarm.remove_listener(listener));
+    let quiet = tokio::time::timeout(Duration::from_secs(2), async {
+        loop {
+            if let SwarmEvent::ConnectionClosed { .. } = swarm.select_next_some().await {
+                return;
+            }
+        }
+    })
+    .await;
+    assert!(
+        quiet.is_err(),
+        "removing the listener closed an outbound connection"
+    );
+    assert!(swarm.is_connected(&target.0.peer_id().to_libp2p()));
+
+    // …and the address no longer accepts: a fresh node cannot connect to it.
+    let late = start(92, &[(me, my_addr)], None).await;
+    let _late_events = collect(vec![late.1]);
+    tokio::spawn(async move { while swarm.next().await.is_some() {} });
+    tokio::time::sleep(Duration::from_secs(3)).await;
+    assert!(
+        !late.0.connected_peers().await.unwrap().contains(&me),
+        "a removed listener still accepted a connection"
+    );
 }

@@ -7,9 +7,9 @@
 //! the **body** — every field but the signature — under the envelope's context string:
 //!
 //! ```text
-//! GossipMessage = suite ‖ network ‖ topic ‖ payload ‖ from      ‖ sig
-//! DhtEntry      = suite ‖ network ‖ key   ‖ value   ‖ signer_pk ‖ sig
-//!                 └──────────────── body (signed) ──────────────┘
+//! GossipMessage = suite ‖ network ‖ topic ‖ payload ‖       from      ‖ sig
+//! DhtEntry      = suite ‖ network ‖ key   ‖ value   ‖ seq ‖ signer_pk ‖ sig
+//!                 └──────────────── body (signed) ────────────────────┘
 //! ```
 //!
 //! **The descriptor comes first and is signed.** ADR-0011 rule 3′ requires the full
@@ -211,13 +211,19 @@ impl Codec for GossipMessage {
 
 // ─── DhtEntry ────────────────────────────────────────────────────────────────────────────────
 
-/// A Kademlia DHT record — the key SHOULD be the publisher's `PeerId` (wire spec §4).
+/// A Kademlia DHT record — the key MUST be the publisher's `PeerId` (wire spec §4).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DhtEntry {
     /// `(role, version)` — `Transaction`, the role of `dht:entry` (crypto spec §5). Signed.
     pub suite: AlgoSuite,
     pub key: Vec<u8>,
     pub value: Vec<u8>,
+    /// The publisher's sequence number. Signed. A node holding a record refuses one with a lower
+    /// `seq` — or the same `seq` and different bytes — so a publisher's *old* record, genuinely
+    /// signed and so otherwise valid forever, cannot be replayed over its newer one (**G5-T5**:
+    /// *nor replayed after expiry*). Without it, anyone who once saw a peer's address record could
+    /// roll the DHT back to it.
+    pub seq: u64,
     pub network: Network,
     pub sig: Signature,
     pub signer_pk: PublicKey,
@@ -229,6 +235,7 @@ struct DhtBody {
     network: WireNetwork,
     key: Vec<u8>,
     value: Vec<u8>,
+    seq: u64,
     signer_pk: WirePublicKey,
 }
 
@@ -239,16 +246,32 @@ struct DhtWire {
 }
 
 impl DhtEntry {
+    /// Signs a record whose `seq` is the current time in microseconds since the Unix epoch — so a
+    /// publisher's successive records order themselves with no state to keep.
     pub fn sign(
         keypair: &Keypair,
         key: Vec<u8>,
         value: Vec<u8>,
         network: &str,
     ) -> CryptoResult<Self> {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |d| u64::try_from(d.as_micros()).unwrap_or(u64::MAX));
+        Self::sign_with_seq(keypair, key, value, now, network)
+    }
+
+    /// Signs a record with an explicit sequence number.
+    pub fn sign_with_seq(
+        keypair: &Keypair,
+        key: Vec<u8>,
+        value: Vec<u8>,
+        seq: u64,
+        network: &str,
+    ) -> CryptoResult<Self> {
         let suite = suite_for(Purpose::DhtEntry.role(), keypair)?;
         let network = self::network(network)?;
         let signer_pk = keypair.public_key().clone();
-        let body = Self::body(suite, network, &key, &value, &signer_pk);
+        let body = Self::body(suite, network, &key, &value, seq, &signer_pk);
         let sig = keypair.sign(
             &to_canonical(&body),
             Some(&dht_entry_context(network.as_str())),
@@ -257,10 +280,17 @@ impl DhtEntry {
             suite,
             key,
             value,
+            seq,
             network,
             sig,
             signer_pk,
         })
+    }
+
+    /// Whether `self` may replace `held`, a record already stored under the same key: only a
+    /// strictly newer one may, and re-storing the identical record is a harmless no-op.
+    pub fn supersedes(&self, held: &DhtEntry) -> bool {
+        self.seq > held.seq || self == held
     }
 
     /// As [`GossipMessage::verify`].
@@ -282,6 +312,7 @@ impl DhtEntry {
             self.network,
             &self.key,
             &self.value,
+            self.seq,
             &self.signer_pk,
         ))
     }
@@ -291,6 +322,7 @@ impl DhtEntry {
         network: Network,
         key: &[u8],
         value: &[u8],
+        seq: u64,
         signer_pk: &PublicKey,
     ) -> DhtBody {
         DhtBody {
@@ -298,6 +330,7 @@ impl DhtEntry {
             network: WireNetwork(network),
             key: key.to_vec(),
             value: value.to_vec(),
+            seq,
             signer_pk: WirePublicKey(signer_pk.clone()),
         }
     }
@@ -311,6 +344,7 @@ impl Codec for DhtEntry {
                 self.network,
                 &self.key,
                 &self.value,
+                self.seq,
                 &self.signer_pk,
             ),
             sig: WireSignature(self.sig.clone()),
@@ -323,6 +357,7 @@ impl Codec for DhtEntry {
             suite: body.suite.0,
             key: body.key,
             value: body.value,
+            seq: body.seq,
             network: body.network.0,
             sig: sig.0,
             signer_pk: body.signer_pk.0,

@@ -42,7 +42,7 @@
 | `PeerId` | `[u8; 32]` | raw 32 bytes; hex display 64 lowercase chars |
 | `GossipTopic` | newtype `String` | UTF-8 topic string (§ crypto spec §6.2) |
 | `GossipMessage` | `{ suite, network, topic, payload, from, sig }` | canonical `Codec`, frozen at G2a — [wire spec §7](05-network-wire-protocol.md) |
-| `DhtEntry` | `{ suite, network, key, value, signer_pk, sig }` | canonical `Codec`, frozen at G2a — [wire spec §7](05-network-wire-protocol.md). Supersedes the hand-framed payload that replaced the forgeable `key‖value` ([ADR-0011](../adr/0011-canonical-serialization.md) rule 5′) |
+| `DhtEntry` | `{ suite, network, key, value, seq, signer_pk, sig }` | canonical `Codec`, frozen at G2a — [wire spec §7](05-network-wire-protocol.md). Supersedes the hand-framed payload that replaced the forgeable `key‖value` ([ADR-0011](../adr/0011-canonical-serialization.md) rule 5′) |
 
 ## 3. Consensus types (to be built, 🟡)
 

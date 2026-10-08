@@ -4,6 +4,12 @@
 //! - **Listening** binds one quinn endpoint that also dials, so a peer's inbound remote address
 //!   *is* its listening address — which is how Kademlia learns dialable addresses without
 //!   libp2p's `identify` (whose key check cannot accept an ML-DSA identity).
+//! - **Removing the listener** stops the endpoint accepting; it does not close it, because the
+//!   same endpoint carries every outbound connection. The port stays bound for dialling, so the
+//!   transport cannot listen again afterwards.
+//! - **Dialling before listening** binds an ephemeral, dial-only endpoint with no server config:
+//!   nothing can connect to it. A later `listen_on` is refused rather than silently moving the
+//!   node's outbound address.
 //! - **Dialling** requires the address to name its peer (`…/quic-v1/p2p/<id>`). The TLS verifier
 //!   is built to accept only that peer (wire spec §2.3 step 3); there is no "dial and see who
 //!   answers". The swarm appends `/p2p/` to every dial whose peer it knows.
@@ -75,7 +81,7 @@ pub struct HuxTransport {
     filter: Option<Arc<dyn DatagramFilter>>,
     endpoint: Option<quinn::Endpoint>,
     listener: Option<(ListenerId, Multiaddr)>,
-    incoming: Option<mpsc::UnboundedReceiver<quinn::Incoming>>,
+    incoming: Option<mpsc::Receiver<quinn::Incoming>>,
     events: VecDeque<
         TransportEvent<BoxFuture<'static, Result<Output, TransportFailure>>, TransportFailure>,
     >,
@@ -103,23 +109,30 @@ impl HuxTransport {
         self
     }
 
-    fn bind(&mut self, addr: SocketAddr) -> Result<quinn::Endpoint, TransportFailure> {
-        let endpoint = quic::bind_endpoint(
-            addr,
-            Some(quic::server_config(&self.identity, self.network)),
-            self.filter.clone(),
-        )?;
+    /// Binds the transport's one endpoint — accepting connections only if `listening`.
+    fn bind(
+        &mut self,
+        addr: SocketAddr,
+        listening: bool,
+    ) -> Result<quinn::Endpoint, TransportFailure> {
+        let server = listening.then(|| quic::server_config(&self.identity, self.network));
+        let endpoint = quic::bind_endpoint(addr, server, self.filter.clone())?;
 
-        let (tx, rx) = mpsc::unbounded_channel();
-        let accepting = endpoint.clone();
-        tokio::spawn(async move {
-            while let Some(incoming) = accepting.accept().await {
-                if tx.send(incoming).is_err() {
-                    break;
+        if listening {
+            // Bounded: when the swarm falls behind, the accept task waits, and new handshakes
+            // queue inside quinn — up to `quic::MAX_PENDING_HANDSHAKES`, beyond which quinn
+            // refuses them. An unbounded hand-off here would defeat that limit.
+            let (tx, rx) = mpsc::channel(INCOMING_QUEUE);
+            let accepting = endpoint.clone();
+            tokio::spawn(async move {
+                while let Some(incoming) = accepting.accept().await {
+                    if tx.send(incoming).await.is_err() {
+                        break;
+                    }
                 }
-            }
-        });
-        self.incoming = Some(rx);
+            });
+            self.incoming = Some(rx);
+        }
         self.endpoint = Some(endpoint.clone());
         Ok(endpoint)
     }
@@ -130,6 +143,9 @@ impl HuxTransport {
         }
     }
 }
+
+/// Accepted connections waiting for the swarm to take them.
+const INCOMING_QUEUE: usize = 64;
 
 /// `/ip4|ip6/<ip>/udp/<port>/quic-v1[/p2p/<id>]` → the socket address and the named peer, if any.
 pub fn parse_address(addr: &Multiaddr) -> Result<(SocketAddr, Option<PeerId>), TransportFailure> {
@@ -194,7 +210,7 @@ impl libp2p::core::Transport for HuxTransport {
         if self.listener.is_some() || self.endpoint.is_some() {
             return Err(TransportError::Other(TransportFailure::AlreadyListening));
         }
-        let endpoint = self.bind(socket).map_err(TransportError::Other)?;
+        let endpoint = self.bind(socket, true).map_err(TransportError::Other)?;
         let listen_addr = socket_to_multiaddr(
             endpoint
                 .local_addr()
@@ -213,8 +229,9 @@ impl libp2p::core::Transport for HuxTransport {
         match &self.listener {
             Some((listener, _)) if *listener == id => {
                 self.listener = None;
-                if let Some(endpoint) = self.endpoint.take() {
-                    endpoint.close(0u32.into(), b"listener removed");
+                // Stop accepting, but keep the endpoint: it carries the outbound connections too.
+                if let Some(endpoint) = &self.endpoint {
+                    endpoint.set_server_config(None);
                 }
                 self.incoming = None;
                 self.events.push_back(TransportEvent::ListenerClosed {
@@ -252,7 +269,8 @@ impl libp2p::core::Transport for HuxTransport {
                     SocketAddr::V4(_) => ([0, 0, 0, 0], 0).into(),
                     SocketAddr::V6(_) => (std::net::Ipv6Addr::UNSPECIFIED, 0).into(),
                 };
-                self.bind(unspecified).map_err(TransportError::Other)?
+                self.bind(unspecified, false)
+                    .map_err(TransportError::Other)?
             }
         };
         let config = self.dial_configs.for_peer(expected);

@@ -29,8 +29,10 @@ use hux_crypto::{
 };
 use hux_network::{
     peer::PeerId,
+    topic::GossipTopic,
     transport::{
         cert::{self, CertError},
+        muxer::Muxer,
         quic,
         socket::DatagramFilter,
         tls::{self, PeerVerifier, TransportIdentity},
@@ -708,15 +710,26 @@ fn g5_t7_tls_and_protocol_signatures_never_verify_as_each_other() {
 
     let tls_sig = tls::sign_handshake(&kp, &message).unwrap();
     for &network in Network::ALL {
+        // Every context the registry can produce: each purpose, and each gossip topic *shape* —
+        // the same 26-context set G1-T2 sweeps, so "every registry context" means the same thing
+        // in both gates (it was two topics short until 2026-10-08).
         let mut contexts: Vec<Vec<u8>> = Purpose::ALL
             .iter()
             .map(|&p| context::context(network, p))
             .collect();
-        contexts.push(context::gossip_context(network.as_str(), "huxplex/intents"));
-        contexts.push(context::gossip_context(
-            network.as_str(),
-            "huxplex/shard/0/blocks",
-        ));
+        for topic in [
+            GossipTopic::intents(),
+            GossipTopic::shard_blocks(0),
+            GossipTopic::shard_blocks(1),
+            GossipTopic::shard_mempool(0),
+        ] {
+            contexts.push(context::gossip_context(network.as_str(), topic.as_str()));
+        }
+        assert_eq!(
+            contexts.len(),
+            13,
+            "9 purposes + 4 topic contexts per network"
+        );
 
         for ctx in contexts {
             let label = String::from_utf8_lossy(&ctx).into_owned();
@@ -737,4 +750,43 @@ fn g5_t7_tls_and_protocol_signatures_never_verify_as_each_other() {
             );
         }
     }
+}
+
+// ─── The muxer and the dial-config cache ─────────────────────────────────────────────────────
+
+#[tokio::test]
+async fn muxer_close_and_poll_are_safe_to_repeat_after_the_end() {
+    use libp2p::core::muxing::StreamMuxer;
+    let (server, client) = (identity(36), identity(37));
+    let (addr, _accepted) = listen(&server, Network::Testnet, None);
+    let conn = connect(&client, Network::Testnet, server.peer_id(), addr)
+        .await
+        .unwrap();
+    let mut muxer = Muxer::new(conn);
+    let mut muxer = std::pin::Pin::new(&mut muxer);
+
+    // The swarm may poll a finished muxer again; an `async` block polled after completion panics.
+    for _ in 0..2 {
+        let closed = futures::future::poll_fn(|cx| muxer.as_mut().poll_close(cx)).await;
+        assert!(closed.is_ok(), "a local close is a clean close: {closed:?}");
+    }
+    for _ in 0..2 {
+        let event = futures::future::poll_fn(|cx| muxer.as_mut().poll(cx)).await;
+        assert!(matches!(event, Err(quinn::ConnectionError::LocallyClosed)));
+    }
+    // Streams on a closed connection fail; they do not hang.
+    let outbound = futures::future::poll_fn(|cx| muxer.as_mut().poll_outbound(cx)).await;
+    assert!(outbound.is_err());
+}
+
+#[test]
+fn the_dial_config_cache_is_bounded() {
+    // Kademlia hands the dialler whatever PeerIds a hostile peer cares to invent.
+    let configs = quic::ClientConfigs::new(Arc::new(identity(38)), Network::Testnet);
+    for i in 0..(quic::MAX_CACHED_DIAL_CONFIGS + 100) {
+        let mut id = [0u8; 32];
+        id[..8].copy_from_slice(&(i as u64).to_be_bytes());
+        configs.for_peer(PeerId { id });
+    }
+    assert_eq!(configs.len(), quic::MAX_CACHED_DIAL_CONFIGS);
 }

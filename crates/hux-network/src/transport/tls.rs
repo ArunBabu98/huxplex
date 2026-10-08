@@ -384,7 +384,9 @@ pub fn server_config(identity: &TransportIdentity, network: Network) -> rustls::
 /// A shared resumption cache, so every dial from one node can resume with any peer it has
 /// handshaken with before. Keyed per peer by [`server_name`].
 pub fn session_cache() -> Arc<dyn ClientSessionStore> {
-    Arc::new(ClientSessionMemoryCache::new(256))
+    Arc::new(ClientSessionMemoryCache::new(
+        super::quic::MAX_CACHED_DIAL_CONFIGS,
+    ))
 }
 
 /// The dialler's TLS config: only the peer `verifier` expects will be accepted.

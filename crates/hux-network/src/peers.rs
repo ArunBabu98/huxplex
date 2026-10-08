@@ -69,6 +69,12 @@ pub struct PeerPolicy {
     /// First redial delay after a failed connection; doubles per consecutive failure.
     pub backoff_base: Duration,
     pub backoff_max: Duration,
+    /// How long a disconnected peer's record is kept before it is forgotten.
+    ///
+    /// Without this the table grows by one entry per identity that ever connected, and identities
+    /// are free: an ML-DSA keypair costs microseconds. Forgetting also forgets a negative score,
+    /// which gives an offender nothing it could not get by generating a fresh identity.
+    pub forget_after: Duration,
 }
 
 impl Default for PeerPolicy {
@@ -78,6 +84,7 @@ impl Default for PeerPolicy {
             ban_duration: Duration::from_secs(600),
             backoff_base: Duration::from_millis(500),
             backoff_max: Duration::from_secs(60),
+            forget_after: Duration::from_secs(600),
         }
     }
 }
@@ -85,8 +92,16 @@ impl Default for PeerPolicy {
 /// The outcome of a penalty.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Verdict {
-    Tolerated { score: i32 },
-    Banned { until: Instant },
+    Tolerated {
+        score: i32,
+    },
+    /// This offence crossed the threshold: the peer is banned from now.
+    Banned {
+        until: Instant,
+    },
+    /// The peer was banned already — an offence still in flight when the ban landed. The ban is
+    /// neither extended nor re-announced.
+    AlreadyBanned,
 }
 
 #[derive(Clone, Debug)]
@@ -96,6 +111,8 @@ struct Entry {
     failures: u32,
     retry_at: Option<Instant>,
     banned_until: Option<Instant>,
+    /// When the peer last became `Disconnected`; what [`PeerTable::prune`] ages from.
+    disconnected_at: Option<Instant>,
 }
 
 impl Default for Entry {
@@ -106,6 +123,7 @@ impl Default for Entry {
             failures: 0,
             retry_at: None,
             banned_until: None,
+            disconnected_at: None,
         }
     }
 }
@@ -186,6 +204,7 @@ impl PeerTable {
             return;
         }
         entry.state = PeerState::Disconnected;
+        entry.disconnected_at = Some(now);
         if failed {
             entry.failures = entry.failures.saturating_add(1);
             let shift = entry.failures.saturating_sub(1).min(16);
@@ -201,6 +220,9 @@ impl PeerTable {
     pub fn penalize(&mut self, peer: PeerId, offence: Offence, now: Instant) -> Verdict {
         let policy = self.policy;
         let entry = self.peers.entry(peer).or_default();
+        if entry.state == PeerState::Banned {
+            return Verdict::AlreadyBanned;
+        }
         entry.score = entry.score.saturating_add(offence.penalty());
         if entry.score <= policy.ban_threshold {
             let until = now + policy.ban_duration;
@@ -217,16 +239,41 @@ impl PeerTable {
     }
 
     /// Lifts every ban that has expired by `now`, returning the peers released. A released peer
-    /// starts again from a clean score.
+    /// starts again from a clean score — it is forgotten, which is the same thing.
     pub fn expire_bans(&mut self, now: Instant) -> Vec<PeerId> {
-        let mut released = Vec::new();
-        for (peer, entry) in &mut self.peers {
-            if entry.state == PeerState::Banned && entry.banned_until.is_some_and(|t| now >= t) {
-                *entry = Entry::default();
-                released.push(*peer);
-            }
+        let released: Vec<PeerId> = self
+            .peers
+            .iter()
+            .filter(|(_, e)| {
+                e.state == PeerState::Banned && e.banned_until.is_some_and(|t| now >= t)
+            })
+            .map(|(peer, _)| *peer)
+            .collect();
+        for peer in &released {
+            self.peers.remove(peer);
         }
         released
+    }
+
+    /// Forgets every peer that has been disconnected for [`PeerPolicy::forget_after`] and has no
+    /// backoff still pending. Connected and banned peers are never forgotten.
+    pub fn prune(&mut self, now: Instant) {
+        let forget_after = self.policy.forget_after;
+        self.peers.retain(|_, e| {
+            let idle = e.state == PeerState::Disconnected
+                && e.retry_at.is_none_or(|t| now >= t)
+                && e.disconnected_at.is_none_or(|t| now >= t + forget_after);
+            !idle
+        });
+    }
+
+    /// How many peers the table holds a record for.
+    pub fn len(&self) -> usize {
+        self.peers.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.peers.is_empty()
     }
 
     fn advance(&mut self, peer: PeerId, to: PeerState) {
@@ -328,5 +375,68 @@ mod tests {
         assert_eq!(table.expire_bans(later), vec![p]);
         assert_eq!(table.state(&p), PeerState::Disconnected);
         assert_eq!(table.score(&p), 0);
+    }
+
+    #[test]
+    fn n11_an_offence_by_a_banned_peer_neither_extends_nor_repeats_the_ban() {
+        let mut table = PeerTable::default();
+        let p = peer(4);
+        table.identified(p);
+        let t0 = Instant::now();
+        let until = loop {
+            if let Verdict::Banned { until } = table.penalize(p, Offence::InvalidSignature, t0) {
+                break until;
+            }
+        };
+        // Messages already in flight when the ban landed are still reported…
+        let later = t0 + Duration::from_secs(30);
+        assert_eq!(
+            table.penalize(p, Offence::InvalidSignature, later),
+            Verdict::AlreadyBanned
+        );
+        // …but the ban still lifts when it was first set to.
+        assert!(
+            table
+                .expire_bans(until - Duration::from_millis(1))
+                .is_empty()
+        );
+        assert_eq!(table.expire_bans(until), vec![p]);
+    }
+
+    #[test]
+    fn n8_disconnected_peers_are_forgotten_so_the_table_stays_bounded() {
+        let policy = PeerPolicy {
+            forget_after: Duration::from_secs(60),
+            ..PeerPolicy::default()
+        };
+        let mut table = PeerTable::new(policy);
+        let t0 = Instant::now();
+        // A thousand throwaway identities, each connecting once and offending once.
+        for i in 0..1000u32 {
+            let mut id = [0u8; 32];
+            id[..4].copy_from_slice(&i.to_be_bytes());
+            let p = PeerId { id };
+            table.identified(p);
+            table.penalize(p, Offence::Malformed, t0);
+            table.disconnected(p, false, t0);
+        }
+        let connected = peer(5);
+        table.identified(connected);
+        let banned = peer(6);
+        table.identified(banned);
+        while !table.is_banned(&banned) {
+            table.penalize(banned, Offence::InvalidRecord, t0);
+        }
+
+        table.prune(t0 + Duration::from_secs(59));
+        assert_eq!(table.len(), 1002, "forgotten too early");
+        table.prune(t0 + Duration::from_secs(60));
+        assert_eq!(
+            table.len(),
+            2,
+            "only the connected and the banned peer remain"
+        );
+        assert!(table.may_process(&connected));
+        assert!(table.is_banned(&banned));
     }
 }

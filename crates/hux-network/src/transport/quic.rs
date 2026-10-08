@@ -2,7 +2,7 @@
 //! **N6** (Initial padding).
 
 use std::{
-    collections::HashMap,
+    collections::{HashMap, VecDeque},
     net::{SocketAddr, UdpSocket},
     sync::{Arc, Mutex},
     time::Duration,
@@ -57,12 +57,20 @@ pub fn transport_config() -> Arc<quinn::TransportConfig> {
     Arc::new(config)
 }
 
+/// Handshakes a listener holds in flight before it refuses new ones.
+///
+/// Each pending handshake costs the responder an ML-DSA signature and up to 3× the client's bytes
+/// of memory; quinn's default (65,536) is sized for servers, not for a node whose honest peer
+/// count is in the tens.
+pub const MAX_PENDING_HANDSHAKES: usize = 256;
+
 /// The listener's QUIC config: [`tls::server_config`] plus [`transport_config`].
 pub fn server_config(identity: &TransportIdentity, network: Network) -> quinn::ServerConfig {
     let crypto = QuicServerConfig::try_from(Arc::new(tls::server_config(identity, network)))
         .expect("the TLS 1.3 config includes the AES-128-GCM suite QUIC requires");
     let mut config = quinn::ServerConfig::with_crypto(Arc::new(crypto));
     config.transport_config(transport_config());
+    config.max_incoming(MAX_PENDING_HANDSHAKES);
     config
 }
 
@@ -75,17 +83,32 @@ pub fn client_config(tls: rustls::ClientConfig) -> quinn::ClientConfig {
     config
 }
 
+/// How many peers' dial configs [`ClientConfigs`] keeps — the same bound as the resumption cache
+/// in [`tls::session_cache`], since a config without a cached session buys nothing.
+pub const MAX_CACHED_DIAL_CONFIGS: usize = 256;
+
 /// Dial configs, one per peer and reused for every dial to it.
 ///
 /// A config is built around a verifier that accepts exactly one `PeerId`, and rustls resumes a
 /// session only under the verifier it was issued under. Caching the config per peer is therefore
 /// what makes 1-RTT resumption (N7) actually happen; a fresh config per dial would silently force
 /// a full handshake — certificate, `CertificateVerify` and all — every time.
+///
+/// **Bounded**, oldest first out: the peers a node dials include every address Kademlia hands it,
+/// and a hostile peer can answer lookups with as many fabricated `PeerId`s as it likes. Evicting
+/// a config costs that peer one full handshake on its next dial, nothing more.
 pub struct ClientConfigs {
     identity: Arc<TransportIdentity>,
     network: Network,
     sessions: Arc<dyn ClientSessionStore>,
-    by_peer: Mutex<HashMap<PeerId, quinn::ClientConfig>>,
+    cache: Mutex<ConfigCache>,
+}
+
+#[derive(Default)]
+struct ConfigCache {
+    by_peer: HashMap<PeerId, quinn::ClientConfig>,
+    /// Insertion order, for eviction.
+    order: VecDeque<PeerId>,
 }
 
 impl ClientConfigs {
@@ -94,24 +117,45 @@ impl ClientConfigs {
             identity,
             network,
             sessions: tls::session_cache(),
-            by_peer: Mutex::new(HashMap::new()),
+            cache: Mutex::default(),
         }
     }
 
     pub fn for_peer(&self, peer: PeerId) -> quinn::ClientConfig {
-        self.by_peer
+        let mut cache = self
+            .cache
+            .lock()
+            .expect("the config cache lock is never held across a panic");
+        if let Some(config) = cache.by_peer.get(&peer) {
+            return config.clone();
+        }
+        let config = client_config(tls::client_config(
+            &self.identity,
+            self.network,
+            Arc::new(tls::PeerVerifier::outbound(peer)),
+            self.sessions.clone(),
+        ));
+        if cache.order.len() >= MAX_CACHED_DIAL_CONFIGS {
+            if let Some(oldest) = cache.order.pop_front() {
+                cache.by_peer.remove(&oldest);
+            }
+        }
+        cache.order.push_back(peer);
+        cache.by_peer.insert(peer, config.clone());
+        config
+    }
+
+    /// How many peers have a cached config.
+    pub fn len(&self) -> usize {
+        self.cache
             .lock()
             .expect("the config cache lock is never held across a panic")
-            .entry(peer)
-            .or_insert_with(|| {
-                client_config(tls::client_config(
-                    &self.identity,
-                    self.network,
-                    Arc::new(tls::PeerVerifier::outbound(peer)),
-                    self.sessions.clone(),
-                ))
-            })
-            .clone()
+            .by_peer
+            .len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
     }
 }
 

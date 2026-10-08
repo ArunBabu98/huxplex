@@ -13,9 +13,26 @@
 //!   node's network, **and** is keyed by its signer's own `PeerId` — so a record cannot be
 //!   republished under another key, and a peer cannot squat another's (**G5-T5**). Records read
 //!   back from the DHT are validated again before they are returned.
+//!   A stored record is replaced only by one that [`DhtEntry::supersedes`] it — a higher `seq` —
+//!   so a publisher's old record cannot be replayed over its new one; a lookup returns the
+//!   highest-`seq` valid record any peer holds.
 //! - **Identity.** Comes only from the transport, which yields no connection before mutual TLS
 //!   authentication. GossipSub runs anonymous: its own signing would need a libp2p key, and every
 //!   envelope already carries an ML-DSA signature.
+//!
+//! # Resource bounds
+//!
+//! Everything a remote peer can make the node hold is bounded:
+//!
+//! | What | Bound |
+//! |---|---|
+//! | Connections | [`NodeConfig::max_peers`] established, [`MAX_PENDING_INCOMING`] mid-handshake, two per peer (`connection_limits`) |
+//! | Dials driven by discovery | only while fewer than [`NodeConfig::target_peers`] are connected |
+//! | Events awaiting the application | [`NodeConfig::event_buffer`]; beyond it events are **dropped**, never queued |
+//! | The peer table | disconnected peers forgotten after `PeerPolicy::forget_after` |
+//! | Dial configs, accepted connections | see `transport::quic` and `transport::p2p` |
+//!
+//! The command channel is unbounded: only the local application can write to it.
 
 use std::{
     collections::HashMap,
@@ -30,6 +47,7 @@ use hux_types::codec::Codec;
 use libp2p::{
     Multiaddr, StreamProtocol, Swarm,
     allow_block_list::{self, BlockedPeers},
+    connection_limits::{self, ConnectionLimits},
     core::{ConnectedPoint, Transport as _, multiaddr::Protocol},
     gossipsub::{
         self, IdentTopic, MessageAcceptance, MessageAuthenticity, MessageId, PeerScoreParams,
@@ -72,7 +90,18 @@ pub struct NodeConfig {
     pub policy: PeerPolicy,
     /// Fault injection for tests; `None` in production.
     pub datagram_filter: Option<Arc<dyn DatagramFilter>>,
+    /// Discovery stops dialling new peers once this many are connected. Kademlia still learns
+    /// them; it just does not connect to every one — which suits five nodes, not five thousand.
+    pub target_peers: usize,
+    /// Hard ceiling on established connections, inbound and outbound together.
+    pub max_peers: u32,
+    /// Events held for the application before new ones are dropped. A node must never grow
+    /// without bound because its application stopped reading.
+    pub event_buffer: usize,
 }
+
+/// Connections allowed to sit in the TLS handshake at once.
+pub const MAX_PENDING_INCOMING: u32 = 64;
 
 impl NodeConfig {
     pub fn new(network: Network, keypair: Keypair, listen: SocketAddr) -> Self {
@@ -85,6 +114,9 @@ impl NodeConfig {
             heartbeat: Duration::from_secs(1),
             policy: PeerPolicy::default(),
             datagram_filter: None,
+            target_peers: 32,
+            max_peers: 128,
+            event_buffer: 4096,
         }
     }
 }
@@ -137,6 +169,7 @@ enum Command {
 
 #[derive(NetworkBehaviour)]
 struct Behaviour {
+    limits: connection_limits::Behaviour,
     blocked: allow_block_list::Behaviour<BlockedPeers>,
     gossipsub: gossipsub::Behaviour,
     kad: kad::Behaviour<MemoryStore>,
@@ -147,7 +180,7 @@ struct Behaviour {
 /// The swarm runs until the node and every handle cloned from it are dropped.
 pub struct Node {
     handle: NodeHandle,
-    events: mpsc::UnboundedReceiver<NodeEvent>,
+    events: mpsc::Receiver<NodeEvent>,
 }
 
 /// Commands to a running node. Cheap to clone; usable from any task.
@@ -178,7 +211,13 @@ impl Node {
             transport = transport.with_datagram_filter(filter);
         }
 
+        let limits = ConnectionLimits::default()
+            .with_max_established(Some(config.max_peers))
+            .with_max_pending_incoming(Some(MAX_PENDING_INCOMING))
+            // Two, not one: simultaneous dials in both directions are normal between peers.
+            .with_max_established_per_peer(Some(2));
         let behaviour = Behaviour {
+            limits: connection_limits::Behaviour::new(limits),
             blocked: allow_block_list::Behaviour::default(),
             gossipsub: gossipsub_behaviour(network, &config.topics, config.heartbeat)?,
             kad: kad_behaviour(local, network),
@@ -216,10 +255,11 @@ impl Node {
         };
 
         let (commands, command_rx) = mpsc::unbounded_channel();
-        let (event_tx, events) = mpsc::unbounded_channel();
+        let (event_tx, events) = mpsc::channel(config.event_buffer.max(1));
         let mut driver = Driver {
             swarm,
             network,
+            target_peers: config.target_peers,
             peers: PeerTable::new(config.policy),
             events: event_tx,
             pending_gets: HashMap::new(),
@@ -251,7 +291,7 @@ impl Node {
     }
 
     /// Splits the node into its command handle and its event stream.
-    pub fn split(self) -> (NodeHandle, mpsc::UnboundedReceiver<NodeEvent>) {
+    pub fn split(self) -> (NodeHandle, mpsc::Receiver<NodeEvent>) {
         (self.handle, self.events)
     }
 }
@@ -374,12 +414,20 @@ fn validate_record(record: &Record, network: Network) -> Option<DhtEntry> {
     (entry.network == network && well_keyed && entry.verify().ok()?).then_some(entry)
 }
 
+/// A lookup in flight: who asked, for whose record, and the best valid record seen so far.
+struct PendingGet {
+    reply: oneshot::Sender<Option<DhtEntry>>,
+    peer: PeerId,
+    best: Option<DhtEntry>,
+}
+
 struct Driver {
     swarm: Swarm<Behaviour>,
     network: Network,
+    target_peers: usize,
     peers: PeerTable,
-    events: mpsc::UnboundedSender<NodeEvent>,
-    pending_gets: HashMap<QueryId, (oneshot::Sender<Option<DhtEntry>>, PeerId)>,
+    events: mpsc::Sender<NodeEvent>,
+    pending_gets: HashMap<QueryId, PendingGet>,
     pending_puts: HashMap<QueryId, oneshot::Sender<Result<(), NodeError>>>,
 }
 
@@ -398,8 +446,16 @@ impl Driver {
         }
     }
 
+    /// Hands an event to the application, or drops it if the application is not keeping up.
     fn emit(&self, event: NodeEvent) {
-        let _ = self.events.send(event);
+        let _ = self.events.try_send(event);
+    }
+
+    /// The record this node holds for `key`, if it is valid.
+    fn held_record(&mut self, key: &RecordKey) -> Option<DhtEntry> {
+        let network = self.network;
+        let held = self.swarm.behaviour_mut().kad.store_mut().get(key)?;
+        validate_record(&held, network)
     }
 
     fn dial(&mut self, peer: PeerId, addr: SocketAddr) {
@@ -431,6 +487,15 @@ impl Driver {
                     )));
                     return;
                 }
+                if let Some(held) = self.held_record(&record.key) {
+                    if !entry.supersedes(&held) {
+                        let _ = reply.send(Err(NodeError::Invalid(format!(
+                            "seq {} does not supersede the held record's seq {}",
+                            entry.seq, held.seq
+                        ))));
+                        return;
+                    }
+                }
                 match self
                     .swarm
                     .behaviour_mut()
@@ -451,7 +516,14 @@ impl Driver {
                     .behaviour_mut()
                     .kad
                     .get_record(RecordKey::new(&peer.id));
-                self.pending_gets.insert(id, (reply, peer));
+                self.pending_gets.insert(
+                    id,
+                    PendingGet {
+                        reply,
+                        peer,
+                        best: None,
+                    },
+                );
             }
             Command::Dial(peer, addr) => self.dial(peer, addr),
             Command::ConnectedPeers(reply) => {
@@ -500,12 +572,14 @@ impl Driver {
     }
 
     fn tick(&mut self) {
-        for peer in self.peers.expire_bans(Instant::now()) {
+        let now = Instant::now();
+        for peer in self.peers.expire_bans(now) {
             self.swarm
                 .behaviour_mut()
                 .blocked
                 .unblock_peer(peer.to_libp2p());
         }
+        self.peers.prune(now);
     }
 
     fn penalize(&mut self, peer: PeerId, offence: Offence) {
@@ -653,16 +727,27 @@ impl Driver {
                 let Some(peer) = PeerId::from_libp2p(&source) else {
                     return;
                 };
-                if validate_record(&record, self.network).is_some() {
-                    let _ = self.swarm.behaviour_mut().kad.store_mut().put(record);
-                } else {
+                let Some(entry) = validate_record(&record, self.network) else {
                     self.penalize(peer, Offence::InvalidRecord);
+                    return;
+                };
+                // A stale record is ignored, not penalised: an honest peer replicating what it
+                // holds can be behind. What it cannot do is roll this node back.
+                if self
+                    .held_record(&record.key)
+                    .is_none_or(|held| entry.supersedes(&held))
+                {
+                    let _ = self.swarm.behaviour_mut().kad.store_mut().put(record);
                 }
             }
             kad::Event::RoutingUpdated {
                 peer, addresses, ..
             } => {
-                // Small networks: connect to every peer discovered, so the gossip mesh can form.
+                // Connect to peers discovered until the target is reached, so the gossip mesh can
+                // form; beyond it Kademlia keeps the peer as a contact, not a connection.
+                if self.swarm.connected_peers().count() >= self.target_peers {
+                    return;
+                }
                 if let Some(hux) = PeerId::from_libp2p(&peer) {
                     if let Ok((socket, _)) = crate::transport::p2p::parse_address(addresses.first())
                     {
@@ -673,31 +758,32 @@ impl Driver {
             kad::Event::OutboundQueryProgressed {
                 id, result, step, ..
             } => match result {
-                QueryResult::GetRecord(Ok(GetRecordOk::FoundRecord(found))) => {
-                    if let Some((_, peer)) = self.pending_gets.get(&id) {
-                        let peer = *peer;
-                        let valid = validate_record(&found.record, self.network)
-                            .filter(|entry| entry.key == peer.id);
-                        if let Some(entry) = valid {
-                            if let Some((reply, _)) = self.pending_gets.remove(&id) {
-                                let _ = reply.send(Some(entry));
+                QueryResult::GetRecord(result) => {
+                    if let Ok(GetRecordOk::FoundRecord(found)) = result {
+                        if let Some(pending) = self.pending_gets.get_mut(&id) {
+                            let peer = pending.peer;
+                            match validate_record(&found.record, self.network)
+                                .filter(|entry| entry.key == peer.id)
+                            {
+                                // Peers may hold different generations; keep the newest.
+                                Some(entry) => {
+                                    if pending.best.as_ref().is_none_or(|b| entry.seq > b.seq) {
+                                        pending.best = Some(entry);
+                                    }
+                                }
+                                None => {
+                                    if let Some(source) =
+                                        found.peer.and_then(|p| PeerId::from_libp2p(&p))
+                                    {
+                                        self.penalize(source, Offence::InvalidRecord);
+                                    }
+                                }
                             }
-                        } else if let Some(source) =
-                            found.peer.and_then(|p| PeerId::from_libp2p(&p))
-                        {
-                            self.penalize(source, Offence::InvalidRecord);
                         }
                     }
                     if step.last {
-                        if let Some((reply, _)) = self.pending_gets.remove(&id) {
-                            let _ = reply.send(None);
-                        }
-                    }
-                }
-                QueryResult::GetRecord(_) => {
-                    if step.last {
-                        if let Some((reply, _)) = self.pending_gets.remove(&id) {
-                            let _ = reply.send(None);
+                        if let Some(pending) = self.pending_gets.remove(&id) {
+                            let _ = pending.reply.send(pending.best);
                         }
                     }
                 }
